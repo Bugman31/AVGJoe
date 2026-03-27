@@ -23,7 +23,7 @@ test.describe('Profile update', () => {
 
     // Email shown in the card — AuthContext fetches /api/auth/me before rendering
     // Give it enough time for the API round-trip to complete
-    await expect(page.getByText(ADMIN_EMAIL)).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText(ADMIN_EMAIL).first()).toBeVisible({ timeout: 8000 });
   });
 
   test('can update display name and see toast confirmation', async ({ page }) => {

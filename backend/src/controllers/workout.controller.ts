@@ -12,19 +12,19 @@ const exerciseSetSchema = z.object({
 const exerciseSchema = z.object({
   name: z.string().min(1, 'Exercise name is required'),
   orderIndex: z.number().int().min(0),
-  notes: z.string().optional(),
+  notes: z.string().nullable().optional(),
   sets: z.array(exerciseSetSchema).min(1, 'At least one set is required'),
 });
 
 const createTemplateSchema = z.object({
   name: z.string().min(1, 'Template name is required').max(200),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(1000).nullable().optional(),
   exercises: z.array(exerciseSchema).min(1, 'At least one exercise is required'),
 });
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(1000).nullable().optional(),
   exercises: z.array(exerciseSchema).optional(),
 });
 

@@ -8,7 +8,7 @@ const ADMIN_PASSWORD = 'Admin1234!';
 test.describe('Login page', () => {
   test('renders title, email field, password field and submit button', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'AVGJoe' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /average joe/i })).toBeVisible();
     await expect(page.getByText('Sign in to your account')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
@@ -38,7 +38,7 @@ test.describe('Login page', () => {
 test.describe('Signup page', () => {
   test('renders all fields and create account button', async ({ page }) => {
     await page.goto('/signup');
-    await expect(page.getByRole('heading', { name: 'AVGJoe' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /average joe/i })).toBeVisible();
     await expect(page.getByText('Create your account')).toBeVisible();
     await expect(page.getByLabel('Name')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeVisible();
@@ -55,7 +55,7 @@ test.describe('Signup page', () => {
     await page.getByLabel('Password').fill('Admin1234!');
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    const errorBox = page.locator('text=/exists|taken|unavailable|error/i').first();
+    const errorBox = page.locator('text=/exists|taken|unavailable|already|error/i').first();
     await expect(errorBox).toBeVisible({ timeout: 8000 });
 
     const bodyText = await page.locator('body').innerText();

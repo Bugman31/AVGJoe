@@ -36,7 +36,7 @@ test.describe('Workout creation', () => {
 
     // Should redirect to /workouts and show the new workout
     await expect(page).toHaveURL(/\/workouts$/, { timeout: 8000 });
-    await expect(page.getByText('Test Push Day')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Test Push Day').first()).toBeVisible({ timeout: 8000 });
   });
 });
 

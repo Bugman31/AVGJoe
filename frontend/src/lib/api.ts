@@ -36,8 +36,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
 
   if (res.status === 401) {
-    handleAuthExpired()
-    throw new Error('Session expired. Please sign in again.')
+    if (token) {
+      // Only treat as expired session if we actually sent a token
+      handleAuthExpired()
+      throw new Error('Session expired. Please sign in again.')
+    }
+    // No token means this is a login/auth failure — pass through the real error
+    const err = await res.json().catch(() => ({ error: 'Unauthorized' }))
+    throw new Error(err.error || 'Unauthorized')
   }
 
   if (!res.ok) {
