@@ -24,8 +24,8 @@ export default function WorkoutDetailPage() {
   useEffect(() => {
     const fetch = async () => {
       try {
-        const data = await api.get<WorkoutTemplate>(`/api/workouts/${id}`)
-        setWorkout(data)
+        const data = await api.get<{ template: WorkoutTemplate } | WorkoutTemplate>(`/api/workouts/${id}`)
+        setWorkout((data as { template: WorkoutTemplate }).template ?? (data as WorkoutTemplate))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load workout')
       } finally {

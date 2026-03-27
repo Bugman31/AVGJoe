@@ -56,13 +56,15 @@ export default function StartWorkoutPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const tmpl = await api.get<WorkoutTemplate>(`/api/workouts/${id}`)
+        const tmplData = await api.get<{ template: WorkoutTemplate } | WorkoutTemplate>(`/api/workouts/${id}`)
+        const tmpl = (tmplData as { template: WorkoutTemplate }).template ?? (tmplData as WorkoutTemplate)
         setTemplate(tmpl)
 
-        const sess = await api.post<WorkoutSession>('/api/sessions/start', {
+        const sessData = await api.post<{ session: WorkoutSession } | WorkoutSession>('/api/sessions/start', {
           templateId: id,
           name: tmpl.name,
         })
+        const sess = (sessData as { session: WorkoutSession }).session ?? (sessData as WorkoutSession)
         setSession(sess)
         startedAtRef.current = new Date()
 
