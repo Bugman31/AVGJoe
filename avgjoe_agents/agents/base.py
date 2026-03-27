@@ -11,7 +11,7 @@ from config.settings import Settings
 
 
 class BaseAgent:
-    MODEL = "claude-sonnet-4-20250514"
+    MODEL = "claude-sonnet-4-6"
 
     def __init__(self, settings: Settings, system_prompt: str):
         self.settings = settings

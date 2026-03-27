@@ -1,0 +1,55 @@
+name: AVGJoe Agent Pipeline
+
+# Trigger manually from the GitHub UI (Actions tab → Run workflow)
+# or via the GitHub API / CLI: gh workflow run agent-pipeline.yml -f feature="..."
+on:
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: 'Feature request for the agent pipeline'
+        required: true
+        type: string
+      mode:
+        description: 'Pipeline mode'
+        required: true
+        default: 'feature'
+        type: choice
+        options:
+          - feature      # full plan → build → test → deploy
+          - plan         # planning only
+          - test         # test only (uses saved state)
+
+jobs:
+  run-agents:
+    name: Run Agent Pipeline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: avgjoe_agents
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: avgjoe_agents/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run agent pipeline
+        run: python cli.py ${{ github.event.inputs.mode }} "${{ github.event.inputs.feature }}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          RUN_TESTS: 'false'
+          WRITE_FILES: 'true'
+
+      - name: Upload pipeline state
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipeline-state
+          path: avgjoe_agents/pipeline_state.json
