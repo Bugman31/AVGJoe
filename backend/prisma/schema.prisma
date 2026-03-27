@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  name             String?
+  anthropicApiKey  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workoutTemplates WorkoutTemplate[]
+  sessions         WorkoutSession[]
+}
+
+model WorkoutTemplate {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  description   String?
+  isAiGenerated Boolean  @default(false)
+  aiGoal        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises Exercise[]
+  sessions  WorkoutSession[]
+
+  @@index([userId])
+}
+
+model Exercise {
+  id         String  @id @default(cuid())
+  templateId String
+  name       String
+  orderIndex Int
+  notes      String?
+
+  template    WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sets        ExerciseSet[]
+  sessionSets SessionSet[]
+
+  @@index([templateId, orderIndex])
+}
+
+model ExerciseSet {
+  id            String  @id @default(cuid())
+  exerciseId    String
+  setNumber     Int
+  targetReps    Int?
+  targetWeight  Float?
+  unit          String  @default("kg")
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([exerciseId])
+}
+
+model WorkoutSession {
+  id          String    @id @default(cuid())
+  userId      String
+  templateId  String?
+  name        String
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  notes       String?
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template WorkoutTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  sets     SessionSet[]
+
+  @@index([userId, startedAt])
+}
+
+model SessionSet {
+  id           String   @id @default(cuid())
+  sessionId    String
+  exerciseId   String
+  exerciseName String
+  setNumber    Int
+  actualReps   Int?
+  actualWeight Float?
+  unit         String   @default("kg")
+  completedAt  DateTime @default(now())
+
+  session  WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId])
+  @@index([exerciseId, completedAt])
+}

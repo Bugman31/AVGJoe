@@ -1,0 +1,21 @@
+{
+  "name": "avgjoe",
+  "version": "1.0.0",
+  "description": "workout tracking app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bugman31/AVGJoe.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Bugman31/AVGJoe/issues"
+  },
+  "homepage": "https://github.com/Bugman31/AVGJoe#readme"
+}

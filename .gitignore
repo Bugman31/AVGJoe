@@ -1,0 +1,60 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+.pnpm-debug.log*
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+
+# Environment / secrets — never commit real keys
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# SQLite database
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Prisma migrations lock (keep migrations folder, not the db)
+# backend/prisma/migrations/ ← keep this
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# Claude local config (contains memory, not source code)
+.claude/
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+
+# Misc
+*.log
+.cache/
