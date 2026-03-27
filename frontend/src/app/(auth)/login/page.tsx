@@ -47,7 +47,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <Image src="/logo.png" alt="Average Joe's Gym" width={72} height={72} className="rounded-2xl mb-3" />
-          <h1 className="text-2xl font-bold text-[#f5f5f5]">Average Joe's</h1>
+          <h1 className="text-2xl font-bold text-[#f5f5f5]">Average Joe&apos;s</h1>
           <p className="text-[#a3a3a3] text-sm mt-0.5">Workout Tracker</p>
           <p className="text-[#a3a3a3] text-sm mt-2">Sign in to your account</p>
         </div>

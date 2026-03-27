@@ -43,7 +43,7 @@ export default function ProfilePage() {
   const handleKeySave = async (e: FormEvent) => {
     e.preventDefault()
     if (!apiKey.trim()) {
-      setKeyError('Please enter an API key')
+      toast.error('Please enter an API key')
       return
     }
     setKeyLoading(true)

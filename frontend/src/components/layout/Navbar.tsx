@@ -53,7 +53,7 @@ export default function Navbar() {
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#2a2a2a]">
           <Image src="/logo.png" alt="Average Joe's Gym" width={36} height={36} className="rounded-lg" />
-          <span className="font-bold text-sm text-[#f5f5f5] leading-tight">Average Joe's<br />Workout Tracker</span>
+          <span className="font-bold text-sm text-[#f5f5f5] leading-tight">Average Joe&apos;s<br />Workout Tracker</span>
         </div>
 
         {/* Nav links */}
