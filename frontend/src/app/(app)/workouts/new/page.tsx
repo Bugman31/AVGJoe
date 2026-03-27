@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
 import { WorkoutTemplate } from '@/types'
 import ExerciseEditor, { ExerciseData } from '@/components/workouts/ExerciseEditor'
@@ -78,9 +79,12 @@ export default function NewWorkoutPage() {
       }
 
       await api.post<WorkoutTemplate>('/api/workouts', payload)
+      toast.success('Workout created!')
       router.push('/workouts')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create workout')
+      const msg = err instanceof Error ? err.message : 'Failed to create workout'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }

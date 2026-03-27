@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 
 const ADMIN_EMAIL = 'admin@avgjoe.com';
 const ADMIN_PASSWORD = 'Admin1234!';
-const BASE = 'http://localhost:3000';
 
 // ─── Page rendering ───────────────────────────────────────────────────────────
 
@@ -20,11 +19,12 @@ test.describe('Login page', () => {
   test('shows sanitized error (not raw Prisma trace) on failed login attempt', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(ADMIN_EMAIL);
-    await page.getByLabel('Password').fill(ADMIN_PASSWORD);
+    // Use wrong password so login actually fails
+    await page.getByLabel('Password').fill('WrongPassword999!');
     await page.getByRole('button', { name: 'Sign in' }).click();
 
     // Wait for error to appear
-    const errorBox = page.locator('text=/unavailable|invalid|error/i').first();
+    const errorBox = page.locator('text=/invalid|incorrect|credentials|error/i').first();
     await expect(errorBox).toBeVisible({ timeout: 8000 });
 
     // Must NOT expose internal Prisma details
@@ -47,14 +47,15 @@ test.describe('Signup page', () => {
     await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 
-  test('shows sanitized error (not raw Prisma trace) on failed signup attempt', async ({ page }) => {
+  test('shows sanitized error (not raw Prisma trace) on duplicate signup', async ({ page }) => {
     await page.goto('/signup');
-    await page.getByLabel('Name').fill('Test User');
-    await page.getByLabel('Email').fill('newuser@test.com');
-    await page.getByLabel('Password').fill('Test1234!');
+    await page.getByLabel('Name').fill('Admin');
+    // Use existing admin email to trigger "already exists" error
+    await page.getByLabel('Email').fill(ADMIN_EMAIL);
+    await page.getByLabel('Password').fill('Admin1234!');
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    const errorBox = page.locator('text=/unavailable|invalid|error/i').first();
+    const errorBox = page.locator('text=/exists|taken|unavailable|error/i').first();
     await expect(errorBox).toBeVisible({ timeout: 8000 });
 
     const bodyText = await page.locator('body').innerText();

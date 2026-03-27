@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { CheckCircle2, Clock, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
 import { WorkoutTemplate, WorkoutSession, ExerciseSet } from '@/types'
 import { cn } from '@/lib/utils'
@@ -135,11 +136,12 @@ export default function StartWorkoutPage() {
     setCompletingError('')
     try {
       await api.patch(`/api/sessions/${session.id}/complete`)
+      toast.success('Workout complete! Great job! 💪')
       router.push('/history')
     } catch (err) {
-      setCompletingError(
-        err instanceof Error ? err.message : 'Failed to complete session'
-      )
+      const msg = err instanceof Error ? err.message : 'Failed to complete session'
+      setCompletingError(msg)
+      toast.error(msg)
       setCompleting(false)
     }
   }

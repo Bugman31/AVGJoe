@@ -9,7 +9,7 @@ import {
   ReactNode,
 } from 'react'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { api, AUTH_EXPIRED_EVENT } from '@/lib/api'
 import {
   storeToken,
   getToken,
@@ -42,6 +42,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const logout = useCallback(() => {
+    removeToken()
+    setUser(null)
+    router.push('/login')
+  }, [router])
+
+  // Listen for auth-expired events fired by api.ts (avoids redirect race conditions)
+  useEffect(() => {
+    window.addEventListener(AUTH_EXPIRED_EVENT, logout)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, logout)
+  }, [logout])
+
   useEffect(() => {
     const init = async () => {
       const token = getToken()
@@ -73,12 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [fetchMe]
   )
-
-  const logout = useCallback(() => {
-    removeToken()
-    setUser(null)
-    router.push('/login')
-  }, [router])
 
   return (
     <AuthContext.Provider

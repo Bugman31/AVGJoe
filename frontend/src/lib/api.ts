@@ -1,9 +1,32 @@
-import { getToken, removeToken } from './auth'
+import { getToken, removeToken, isTokenExpired } from './auth'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// Fired when any request returns 401 — AuthContext listens and logs the user out cleanly
+export const AUTH_EXPIRED_EVENT = 'avgjoe:auth-expired'
+
+let authExpiredFired = false
+
+function handleAuthExpired() {
+  removeToken()
+  if (!authExpiredFired) {
+    authExpiredFired = true
+    // Use event so all in-flight requests collapse into one logout, not a race of redirects
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+    // Reset flag after a tick so subsequent fresh 401s (after re-login) still fire
+    setTimeout(() => { authExpiredFired = false }, 2000)
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
+
+  // Proactively reject expired tokens before making a network call
+  if (token && isTokenExpired(token)) {
+    handleAuthExpired()
+    throw new Error('Session expired. Please sign in again.')
+  }
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -13,9 +36,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
 
   if (res.status === 401) {
-    removeToken()
-    window.location.href = '/login'
-    throw new Error('Unauthorized')
+    handleAuthExpired()
+    throw new Error('Session expired. Please sign in again.')
   }
 
   if (!res.ok) {

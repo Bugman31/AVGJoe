@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import compression from 'compression';
 
 import authRoutes from './routes/auth.routes';
 import workoutRoutes from './routes/workout.routes';
@@ -9,16 +12,29 @@ import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
 
+// Security headers
+app.use(helmet());
+
+// Request logging (skip in test)
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('combined'));
+}
+
+// Gzip compression
+app.use(compression());
+
 // CORS
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
+    maxAge: 86400,
   })
 );
 
-// Body parsing
-app.use(express.json());
+// Body parsing — 50kb limit to prevent payload DoS
+app.use(express.json({ limit: '50kb' }));
+app.use(express.urlencoded({ extended: true, limit: '50kb' }));
 
 // Health check
 app.get('/health', (_req, res) => {

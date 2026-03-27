@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from 'react'
 import { ExternalLink, User, Key } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/lib/api'
 import { User as UserType } from '@/types'
@@ -16,14 +17,10 @@ export default function ProfilePage() {
   // Profile section
   const [name, setName] = useState(user?.name || '')
   const [profileLoading, setProfileLoading] = useState(false)
-  const [profileSuccess, setProfileSuccess] = useState(false)
-  const [profileError, setProfileError] = useState('')
 
   // API key section
   const [apiKey, setApiKey] = useState('')
   const [keyLoading, setKeyLoading] = useState(false)
-  const [keySuccess, setKeySuccess] = useState(false)
-  const [keyError, setKeyError] = useState('')
 
   useEffect(() => {
     if (user?.name) setName(user.name)
@@ -32,15 +29,12 @@ export default function ProfilePage() {
   const handleProfileSave = async (e: FormEvent) => {
     e.preventDefault()
     setProfileLoading(true)
-    setProfileSuccess(false)
-    setProfileError('')
 
     try {
       await api.put<UserType>('/api/auth/me', { name: name.trim() || null })
-      setProfileSuccess(true)
-      setTimeout(() => setProfileSuccess(false), 3000)
+      toast.success('Profile saved!')
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : 'Failed to save')
+      toast.error(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setProfileLoading(false)
     }
@@ -53,18 +47,15 @@ export default function ProfilePage() {
       return
     }
     setKeyLoading(true)
-    setKeySuccess(false)
-    setKeyError('')
 
     try {
       await api.put<UserType>('/api/auth/me', {
         anthropicApiKey: apiKey.trim(),
       })
-      setKeySuccess(true)
+      toast.success('API key saved!')
       setApiKey('')
-      setTimeout(() => setKeySuccess(false), 3000)
     } catch (err) {
-      setKeyError(err instanceof Error ? err.message : 'Failed to save key')
+      toast.error(err instanceof Error ? err.message : 'Failed to save key')
     } finally {
       setKeyLoading(false)
     }
@@ -103,13 +94,6 @@ export default function ProfilePage() {
             readOnly
             className="opacity-60 cursor-not-allowed"
           />
-
-          {profileError && (
-            <p className="text-danger text-sm">{profileError}</p>
-          )}
-          {profileSuccess && (
-            <p className="text-success text-sm">Profile saved!</p>
-          )}
 
           <Button
             type="submit"
@@ -165,11 +149,6 @@ export default function ProfilePage() {
             Get your API key at console.anthropic.com
             <ExternalLink className="w-3 h-3" />
           </a>
-
-          {keyError && <p className="text-danger text-sm">{keyError}</p>}
-          {keySuccess && (
-            <p className="text-success text-sm">API key saved!</p>
-          )}
 
           <Button
             type="submit"

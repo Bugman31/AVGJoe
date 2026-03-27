@@ -11,7 +11,7 @@ import { WorkoutSession } from '@/types'
 import { formatDate, formatDuration } from '@/lib/utils'
 import WorkoutCard from '@/components/workouts/WorkoutCard'
 import Card from '@/components/ui/Card'
-import Spinner from '@/components/ui/Spinner'
+import { WorkoutCardSkeleton, SessionCardSkeleton } from '@/components/ui/Skeleton'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -89,8 +89,8 @@ export default function DashboardPage() {
         </div>
 
         {sessionsLoading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => <SessionCardSkeleton key={i} />)}
           </div>
         ) : sessions.length === 0 ? (
           <Card className="text-center py-8">
@@ -130,8 +130,8 @@ export default function DashboardPage() {
         </div>
 
         {workoutsLoading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[...Array(4)].map((_, i) => <WorkoutCardSkeleton key={i} />)}
           </div>
         ) : workouts.length === 0 ? (
           <Card className="text-center py-8">

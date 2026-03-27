@@ -20,30 +20,23 @@ test.describe('Workout creation', () => {
     await loginAs(page);
     await page.goto('/workouts/new');
 
-    // Fill workout name
-    await page.getByPlaceholder(/workout name/i).fill('Test Push Day');
+    // Fill workout name — label is "Workout Name"
+    await page.getByLabel('Workout Name').fill('Test Push Day');
 
-    // Add an exercise
-    await page.getByRole('button', { name: /add exercise/i }).click();
-    const exerciseInput = page.locator('input[placeholder*="exercise" i]').last();
-    await exerciseInput.fill('Bench Press');
+    // The form starts with one exercise row — fill its name input
+    // placeholder is exactly "Exercise name"
+    await page.locator('input[placeholder="Exercise name"]').first().fill('Bench Press');
 
-    // Add a set
-    const addSetBtn = page.getByRole('button', { name: /add set/i }).last();
-    await addSetBtn.click();
+    // Fill target reps and weight for the default set
+    await page.locator('input[placeholder="Reps"]').first().fill('10');
+    await page.locator('input[placeholder="Weight"]').first().fill('60');
 
-    // Fill reps and weight
-    const repsInput = page.locator('input[placeholder*="reps" i]').last();
-    const weightInput = page.locator('input[placeholder*="weight" i]').last();
-    await repsInput.fill('10');
-    await weightInput.fill('60');
-
-    // Submit
-    await page.getByRole('button', { name: /save|create workout/i }).click();
+    // Submit — button text is "Save Workout"
+    await page.getByRole('button', { name: 'Save Workout' }).click();
 
     // Should redirect to /workouts and show the new workout
-    await expect(page).toHaveURL(/\/workouts/, { timeout: 8000 });
-    await expect(page.getByText('Test Push Day')).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/workouts$/, { timeout: 8000 });
+    await expect(page.getByText('Test Push Day')).toBeVisible({ timeout: 8000 });
   });
 });
 
@@ -53,7 +46,6 @@ test.describe('Workout session — log data', () => {
   let templateId: string;
 
   test.beforeAll(async ({ request }) => {
-    // Log in to get token
     const loginRes = await request.post(`${API}/api/auth/login`, {
       data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
     });
@@ -81,25 +73,20 @@ test.describe('Workout session — log data', () => {
     await loginAs(page);
     await page.goto(`/workouts/${templateId}/start`);
 
-    // Session timer should be visible
-    await expect(page.locator('text=/\\d+:\\d+/').first()).toBeVisible({ timeout: 6000 });
+    // Wait for session to initialise — timer span appears with font-mono class
+    const timer = page.locator('span.font-mono').first();
+    await expect(timer).toBeVisible({ timeout: 8000 });
+    await expect(timer).toHaveText(/\d\d:\d\d/);
 
     // Fill in actual reps and weight for the first set
-    const repsInput = page.locator('input[placeholder*="reps" i], input[aria-label*="reps" i]').first();
-    const weightInput = page.locator('input[placeholder*="weight" i], input[aria-label*="weight" i]').first();
-    await repsInput.fill('5');
-    await weightInput.fill('100');
+    await page.locator('input[placeholder="Reps"]').first().fill('5');
+    await page.locator('input[placeholder="Weight"]').first().fill('100');
 
-    // Click Done / log the set
-    const doneBtn = page.getByRole('button', { name: /done|log|complete set/i }).first();
-    await doneBtn.click();
+    // Click the "Mark done" button (title attribute, no visible text)
+    await page.locator('button[title="Mark done"]').first().click();
 
-    // Set should be marked complete (checkmark or completed state)
-    await expect(page.locator('[data-completed="true"], .set-complete, text=/✓|completed/i').first())
-      .toBeVisible({ timeout: 5000 })
-      .catch(() => {
-        // Some UIs change button color rather than showing text — acceptable
-      });
+    // Set is marked done when the button disappears (replaced by CheckCircle icon)
+    await expect(page.locator('button[title="Mark done"]').first()).toBeHidden({ timeout: 5000 });
 
     // Complete the workout
     await page.getByRole('button', { name: /complete workout/i }).click();

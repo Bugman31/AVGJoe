@@ -19,11 +19,6 @@ export async function generate(
     const template = await aiService.generateWorkout(req.user.id, body);
     res.status(201).json({ template });
   } catch (err) {
-    const error = err as Error & { statusCode?: number };
-    if (error.statusCode === 400 || error.statusCode === 422) {
-      res.status(error.statusCode).json({ error: error.message });
-      return;
-    }
     next(err);
   }
 }

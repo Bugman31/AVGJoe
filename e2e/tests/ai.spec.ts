@@ -18,9 +18,8 @@ test.describe('AI workout generation', () => {
     await loginAs(page);
     await page.goto('/ai');
 
-    // Page heading visible
-    await expect(page.locator('h1, h2').filter({ hasText: /AI|generate|workout/i }).first())
-      .toBeVisible({ timeout: 6000 });
+    // Page heading visible — h1 contains "AI Workout Generator"
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/AI/i, { timeout: 6000 });
 
     // Goal textarea present and fillable
     const goalInput = page.locator('textarea').first();
@@ -29,12 +28,11 @@ test.describe('AI workout generation', () => {
 
     // Fitness level selector
     const levelSelect = page.locator('select').first();
-    if (await levelSelect.isVisible()) {
-      await levelSelect.selectOption({ index: 1 });
-    }
+    await expect(levelSelect).toBeVisible();
+    await levelSelect.selectOption({ index: 1 });
 
-    // Submit button present and enabled
-    const submitBtn = page.getByRole('button', { name: /generate|create|submit/i });
+    // Submit button present and enabled — "Generate Workout"
+    const submitBtn = page.getByRole('button', { name: /generate workout/i });
     await expect(submitBtn).toBeVisible();
     await expect(submitBtn).toBeEnabled();
   });
@@ -45,19 +43,16 @@ test.describe('AI workout generation', () => {
 
     await page.locator('textarea').first().fill('Lose weight with bodyweight exercises');
 
-    const submitBtn = page.getByRole('button', { name: /generate|create|submit/i });
-    await submitBtn.click();
+    await page.getByRole('button', { name: /generate workout/i }).click();
 
-    // Wait for either: a workout preview OR an error message (not a crash)
-    // The API key may not be configured — that's OK, we just need a handled response
-    await expect(
-      page.locator([
-        'text=/generated|workout|saved|preview/i',
-        'text=/error|unavailable|key|configure/i',
-        '[role="alert"]',
-        '.error, .success, .preview',
-      ].join(', ')).first()
-    ).toBeVisible({ timeout: 20000 });
+    // Wait for either a result preview OR an error message — not a crash
+    // Use .or() to combine locators without invalid regex/CSS mixing
+    const result = page.getByText(/generated|workout plan/i)
+      .or(page.getByText(/error|unavailable|key|configure|failed/i))
+      .or(page.locator('[role="alert"]'))
+      .or(page.locator('p.text-danger'));
+
+    await expect(result.first()).toBeVisible({ timeout: 30000 });
 
     // Page must not show an unhandled runtime error
     const bodyText = await page.locator('body').innerText();

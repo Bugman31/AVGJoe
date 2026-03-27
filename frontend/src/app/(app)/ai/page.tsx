@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sparkles } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
 import { WorkoutTemplate } from '@/types'
 import WorkoutPreview from '@/components/ai/WorkoutPreview'
@@ -51,8 +52,11 @@ export default function AIPage() {
         equipment,
       })
       setResult(data)
+      toast.success('Workout generated!')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI generation failed')
+      const msg = err instanceof Error ? err.message : 'AI generation failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }

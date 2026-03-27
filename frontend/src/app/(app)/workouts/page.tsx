@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { useWorkouts } from '@/hooks/useWorkouts'
 import WorkoutCard from '@/components/workouts/WorkoutCard'
-import Spinner from '@/components/ui/Spinner'
 import Card from '@/components/ui/Card'
+import { WorkoutCardSkeleton } from '@/components/ui/Skeleton'
 
 export default function WorkoutsPage() {
   const { workouts, isLoading, error } = useWorkouts()
@@ -17,8 +17,8 @@ export default function WorkoutsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <WorkoutCardSkeleton key={i} />)}
         </div>
       ) : error ? (
         <Card className="text-center py-8">

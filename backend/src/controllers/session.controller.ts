@@ -40,8 +40,10 @@ export async function listSessions(
   next: NextFunction
 ): Promise<void> {
   try {
-    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10), 100);
-    const offset = parseInt(String(req.query.offset ?? '0'), 10);
+    const rawLimit = parseInt(String(req.query.limit ?? '20'), 10);
+    const limit = isNaN(rawLimit) ? 20 : Math.max(1, Math.min(rawLimit, 100));
+    const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
+    const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
     const result = await sessionService.listSessions(req.user.id, limit, offset);
     res.json(result);
   } catch (err) {
@@ -101,7 +103,8 @@ export async function getProgress(
 ): Promise<void> {
   try {
     const exerciseId = req.params.exerciseId;
-    const weeks = Math.min(parseInt(String(req.query.weeks ?? '12'), 10), 52);
+    const rawWeeks = parseInt(String(req.query.weeks ?? '12'), 10);
+    const weeks = isNaN(rawWeeks) ? 12 : Math.max(1, Math.min(rawWeeks, 52));
     const progress = await sessionService.getProgress(exerciseId, req.user.id, weeks);
     res.json({ progress, exerciseId, weeks });
   } catch (err) {
