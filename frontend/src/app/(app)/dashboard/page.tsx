@@ -109,7 +109,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-[#a3a3a3]">
-                      {session.sets.length} sets
+                      {session.sets?.length ?? 0} sets
                     </span>
                     <ChevronRight className="w-4 h-4 text-[#a3a3a3]" />
                   </div>

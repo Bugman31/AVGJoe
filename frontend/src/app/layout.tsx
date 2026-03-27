@@ -7,7 +7,7 @@ import { AuthProvider } from '@/context/AuthContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AVGJoe — Workout Tracker',
+  title: "Average Joe's Workout Tracker",
   description: 'Track your workouts, log your progress, and get AI-powered workout plans tailored to your goals.',
 }
 

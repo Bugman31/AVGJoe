@@ -9,8 +9,8 @@ import {
   Clock,
   User,
   LogOut,
-  Zap,
 } from 'lucide-react'
+import Image from 'next/image'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 
@@ -51,11 +51,9 @@ export default function Navbar() {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex fixed left-0 top-0 h-screen w-64 bg-[#141414] border-r border-[#2a2a2a] flex-col z-50">
         {/* Logo */}
-        <div className="flex items-center gap-2 px-6 py-5 border-b border-[#2a2a2a]">
-          <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-lg text-[#f5f5f5]">AVGJoe</span>
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-[#2a2a2a]">
+          <Image src="/logo.png" alt="Average Joe's Gym" width={36} height={36} className="rounded-lg" />
+          <span className="font-bold text-sm text-[#f5f5f5] leading-tight">Average Joe's<br />Workout Tracker</span>
         </div>
 
         {/* Nav links */}

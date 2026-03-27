@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Zap } from 'lucide-react'
+import Image from 'next/image'
 import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import Input from '@/components/ui/Input'
@@ -46,11 +46,10 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center mb-3">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-[#f5f5f5]">AVGJoe</h1>
-          <p className="text-[#a3a3a3] text-sm mt-1">Sign in to your account</p>
+          <Image src="/logo.png" alt="Average Joe's Gym" width={72} height={72} className="rounded-2xl mb-3" />
+          <h1 className="text-2xl font-bold text-[#f5f5f5]">Average Joe's</h1>
+          <p className="text-[#a3a3a3] text-sm mt-0.5">Workout Tracker</p>
+          <p className="text-[#a3a3a3] text-sm mt-2">Sign in to your account</p>
         </div>
 
         {/* Card */}
