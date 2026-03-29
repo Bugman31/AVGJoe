@@ -109,11 +109,17 @@ Output structured JSON:
   "test_files": [
     {{
       "path": "tests/integration/test_auth.py",
-      "framework": "pytest|jest|playwright|cypress",
+      "framework": "pytest | jest-backend | jest-mobile | playwright",
       "content": "full test file content",
       "test_count": 5
     }}
   ],
+  "_framework_guide": {{
+    "pytest":        "Python integration tests in tests/",
+    "jest-backend":  "Backend unit tests in backend/src/__tests__/",
+    "jest-mobile":   "Mobile unit tests in mobile/__tests__/ — uses Jest + RNTL",
+    "playwright":    "Web E2E tests in e2e/tests/"
+  }},
   "acceptance_criteria_results": [
     {{
       "criterion": "string",
@@ -192,26 +198,61 @@ Generate a complete test suite for this build. Rules:
     def _run_tests(self, workspace: str, test_result: dict) -> dict:
         """Write test files and execute them in the workspace."""
         results = []
+
         for tf in test_result.get("test_files", []):
-            if tf.get("framework") != "pytest":
-                continue
+            framework = tf.get("framework", "")
             test_path = os.path.join(workspace, tf["path"])
             os.makedirs(os.path.dirname(test_path), exist_ok=True)
             with open(test_path, "w") as f:
                 f.write(tf["content"])
 
-            proc = subprocess.run(
-                ["python", "-m", "pytest", test_path, "-v", "--tb=short"],
-                capture_output=True,
-                text=True,
-                cwd=workspace,
-            )
-            results.append({
-                "file": tf["path"],
-                "returncode": proc.returncode,
-                "stdout": proc.stdout[-2000:],
-                "stderr": proc.stderr[-500:],
-            })
+            if framework == "pytest":
+                proc = subprocess.run(
+                    ["python", "-m", "pytest", test_path, "-v", "--tb=short"],
+                    capture_output=True, text=True, cwd=workspace,
+                )
+                results.append({
+                    "file": tf["path"],
+                    "framework": "pytest",
+                    "returncode": proc.returncode,
+                    "stdout": proc.stdout[-2000:],
+                    "stderr": proc.stderr[-500:],
+                })
+
+            elif framework == "jest-mobile":
+                # Mobile unit tests — run via `npm test` in the mobile/ directory
+                mobile_dir = os.path.join(workspace, "mobile")
+                # Only run this specific test file
+                rel_path = os.path.relpath(test_path, mobile_dir)
+                proc = subprocess.run(
+                    ["npm", "test", "--", "--testPathPattern", rel_path,
+                     "--no-coverage", "--forceExit"],
+                    capture_output=True, text=True, cwd=mobile_dir,
+                )
+                results.append({
+                    "file": tf["path"],
+                    "framework": "jest-mobile",
+                    "returncode": proc.returncode,
+                    "stdout": proc.stdout[-2000:],
+                    "stderr": proc.stderr[-500:],
+                })
+
+            elif framework == "jest-backend":
+                # Backend unit tests — run via `npm test` in the backend/ directory
+                backend_dir = os.path.join(workspace, "backend")
+                rel_path = os.path.relpath(test_path, backend_dir)
+                proc = subprocess.run(
+                    ["npm", "test", "--", "--testPathPattern", rel_path,
+                     "--no-coverage", "--forceExit"],
+                    capture_output=True, text=True, cwd=backend_dir,
+                )
+                results.append({
+                    "file": tf["path"],
+                    "framework": "jest-backend",
+                    "returncode": proc.returncode,
+                    "stdout": proc.stdout[-2000:],
+                    "stderr": proc.stderr[-500:],
+                })
 
         any_failed = any(r["returncode"] != 0 for r in results)
         test_result["execution_results"] = results
@@ -220,3 +261,74 @@ Generate a complete test suite for this build. Rules:
             test_result["summary"] += " (execution failures detected)"
 
         return test_result
+
+    def run_mobile_tests(self, workspace: str) -> dict:
+        """Run the full mobile Jest test suite and return a structured report."""
+        mobile_dir = os.path.join(workspace, "mobile")
+        proc = subprocess.run(
+            ["npm", "test", "--", "--no-coverage", "--forceExit", "--json",
+             "--outputFile", "/tmp/avgjoe_mobile_test_results.json"],
+            capture_output=True, text=True, cwd=mobile_dir,
+        )
+        # Parse Jest JSON output if available
+        try:
+            with open("/tmp/avgjoe_mobile_test_results.json") as f:
+                jest_json = json.load(f)
+            return {
+                "passed": jest_json.get("success", False),
+                "total": jest_json.get("numTotalTests", 0),
+                "passed_count": jest_json.get("numPassedTests", 0),
+                "failed_count": jest_json.get("numFailedTests", 0),
+                "suites": jest_json.get("numTotalTestSuites", 0),
+                "stdout": proc.stdout[-3000:],
+            }
+        except Exception:
+            return {
+                "passed": proc.returncode == 0,
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-3000:],
+                "stderr": proc.stderr[-500:],
+            }
+
+    def run_all_tests(self, workspace: str) -> dict:
+        """
+        Run every test layer and return a combined report:
+          - mobile:  Jest + RNTL  (mobile/__tests__/)
+          - backend: Jest          (backend/src/__tests__/)
+          - e2e:     Playwright    (e2e/tests/)
+        """
+        report = {}
+
+        # 1. Mobile unit tests
+        report["mobile"] = self.run_mobile_tests(workspace)
+
+        # 2. Backend unit tests
+        backend_dir = os.path.join(workspace, "backend")
+        proc = subprocess.run(
+            ["npm", "test", "--", "--no-coverage", "--forceExit"],
+            capture_output=True, text=True, cwd=backend_dir,
+        )
+        report["backend"] = {
+            "passed": proc.returncode == 0,
+            "returncode": proc.returncode,
+            "stdout": proc.stdout[-2000:],
+        }
+
+        # 3. E2E (Playwright) — only if a display is available
+        e2e_dir = os.path.join(workspace, "e2e")
+        if os.path.isdir(e2e_dir):
+            proc = subprocess.run(
+                ["npx", "playwright", "test", "--reporter=line"],
+                capture_output=True, text=True, cwd=e2e_dir,
+            )
+            report["e2e"] = {
+                "passed": proc.returncode == 0,
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-2000:],
+            }
+
+        report["all_passed"] = all(
+            v.get("passed", False) for v in report.values()
+            if isinstance(v, dict)
+        )
+        return report

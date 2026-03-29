@@ -76,14 +76,42 @@ describe('AuthContext', () => {
     expect(mockAuthLib.removeToken).toHaveBeenCalled();
   });
 
-  it('login() stores token and sets user', async () => {
-    // First call: restoreSession fails (no existing session)
-    // Second call: /me after login succeeds
+  it('login() stores token and sets user when userData provided', async () => {
+    // restoreSession fails (no existing session)
+    (mockApiLib.api.get as jest.Mock).mockRejectedValueOnce(new Error('no session'));
+
+    let loginFn: (token: string, userData?: typeof mockUser) => Promise<void>;
+    function LoginConsumer() {
+      const { login } = useAuth();
+      loginFn = login;
+      return <TestConsumer />;
+    }
+
+    const { getByTestId } = render(
+      <AuthProvider>
+        <LoginConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('loading').props.children).toBe('false'));
+
+    await act(async () => {
+      await loginFn!('new-token', mockUser);
+    });
+
+    expect(mockAuthLib.storeToken).toHaveBeenCalledWith('new-token');
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('user').props.children).toBe(mockUser.email);
+    // Should NOT have called /me again — user was passed directly
+    expect(mockApiLib.api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('login() falls back to /me when userData not provided', async () => {
+    // First call: restoreSession fails; second call: /me after login succeeds
     (mockApiLib.api.get as jest.Mock)
       .mockRejectedValueOnce(new Error('no session'))
       .mockResolvedValueOnce({ user: mockUser });
 
-    let loginFn: (token: string) => Promise<void>;
+    let loginFn: (token: string, userData?: typeof mockUser) => Promise<void>;
     function LoginConsumer() {
       const { login } = useAuth();
       loginFn = login;
@@ -103,6 +131,7 @@ describe('AuthContext', () => {
 
     expect(mockAuthLib.storeToken).toHaveBeenCalledWith('new-token');
     expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(mockApiLib.api.get).toHaveBeenCalledTimes(2);
   });
 
   it('logout() clears token and user', async () => {

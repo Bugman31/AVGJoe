@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, typography } from '@/lib/theme';
+import { User } from '@/types';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -28,11 +29,11 @@ export default function LoginScreen() {
     }
     setIsLoading(true);
     try {
-      const response = await api.post<{ token: string }>('/api/auth/login', {
+      const response = await api.post<{ token: string; user: User }>('/api/auth/login', {
         email,
         password,
       });
-      await login(response.token);
+      await login(response.token, response.user);
     } catch (err) {
       Toast.show({
         type: 'error',

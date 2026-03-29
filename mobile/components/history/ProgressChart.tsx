@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { LineChart } from 'react-native-gifted-charts';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { api } from '@/lib/api';
 import { ProgressDataPoint } from '@/types';
 import { Spinner } from '@/components/ui/Spinner';
@@ -10,8 +9,6 @@ interface ProgressChartProps {
   exerciseId: string;
   exerciseName: string;
 }
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export function ProgressChart({ exerciseId, exerciseName }: ProgressChartProps) {
   const [data, setData] = useState<ProgressDataPoint[]>([]);
@@ -28,65 +25,113 @@ export function ProgressChart({ exerciseId, exerciseName }: ProgressChartProps) 
 
   if (isLoading) return <Spinner size="small" />;
   if (error) return <Text style={styles.error}>{error}</Text>;
-  if (data.length < 2) {
-    return <Text style={styles.empty}>Not enough data to show progress chart.</Text>;
-  }
+  if (data.length < 2) return (
+    <Text style={styles.empty}>Not enough data to show progress yet.</Text>
+  );
 
-  const chartData = data.map((point) => ({
-    value: point.maxWeight,
-    dataPointLabelComponent: point.isPR
-      ? () => <Text style={styles.pr}>PR</Text>
-      : undefined,
-  }));
+  const maxWeight = Math.max(...data.map((d) => d.maxWeight));
+  const BAR_HEIGHT = 120;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{exerciseName} — Max Weight</Text>
-      <LineChart
-        data={chartData}
-        width={SCREEN_WIDTH - spacing.lg * 4}
-        height={180}
-        color={colors.accent}
-        thickness={2}
-        dataPointsColor={colors.accent}
-        dataPointsRadius={4}
-        startFillColor={colors.accentLight}
-        endFillColor="transparent"
-        areaChart
-        curved
-        yAxisColor={colors.border}
-        xAxisColor={colors.border}
-        yAxisTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
-        xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
-        backgroundColor={colors.surface}
-        noOfSections={4}
-        spacing={Math.max(24, (SCREEN_WIDTH - spacing.lg * 4 - 60) / data.length)}
-      />
+      <Text style={styles.title}>{exerciseName} — Max Weight Progress</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.chart}>
+          {/* Bars */}
+          <View style={styles.barsRow}>
+            {data.map((point, i) => {
+              const heightPct = maxWeight > 0 ? point.maxWeight / maxWeight : 0;
+              const barHeight = Math.max(4, heightPct * BAR_HEIGHT);
+              return (
+                <View key={i} style={styles.barWrapper}>
+                  {point.isPR && <Text style={styles.prLabel}>PR</Text>}
+                  <View style={[styles.barContainer, { height: BAR_HEIGHT }]}>
+                    <View
+                      style={[
+                        styles.bar,
+                        {
+                          height: barHeight,
+                          backgroundColor: point.isPR ? colors.success : colors.accent,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.barValue}>{point.maxWeight}</Text>
+                  <Text style={styles.barDate}>
+                    {new Date(point.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+      <View style={styles.legend}>
+        <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
+        <Text style={styles.legendText}>Weight (kg)</Text>
+        <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+        <Text style={styles.legendText}>Personal Record</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.sm,
-  },
+  container: { gap: spacing.sm },
   title: {
     fontSize: typography.sm,
     fontWeight: '600',
     color: colors.textSecondary,
   },
-  pr: {
+  chart: { paddingVertical: spacing.sm },
+  barsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  barWrapper: {
+    alignItems: 'center',
+    width: 44,
+  },
+  prLabel: {
     fontSize: 9,
     fontWeight: '700',
     color: colors.success,
+    marginBottom: 2,
   },
-  error: {
-    fontSize: typography.sm,
-    color: colors.danger,
+  barContainer: {
+    justifyContent: 'flex-end',
+    width: 20,
   },
-  empty: {
-    fontSize: typography.sm,
+  bar: {
+    width: 20,
+    borderRadius: 3,
+  },
+  barValue: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+  barDate: {
+    fontSize: 8,
     color: colors.textMuted,
-    fontStyle: 'italic',
+    textAlign: 'center',
   },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: typography.xs,
+    color: colors.textMuted,
+  },
+  error: { fontSize: typography.sm, color: colors.danger },
+  empty: { fontSize: typography.sm, color: colors.textMuted, fontStyle: 'italic' },
 });

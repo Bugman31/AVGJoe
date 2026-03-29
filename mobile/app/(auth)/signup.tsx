@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, typography } from '@/lib/theme';
+import { User } from '@/types';
 
 export default function SignupScreen() {
   const { login } = useAuth();
@@ -29,12 +30,12 @@ export default function SignupScreen() {
     }
     setIsLoading(true);
     try {
-      const response = await api.post<{ token: string }>('/api/auth/signup', {
+      const response = await api.post<{ token: string; user: User }>('/api/auth/signup', {
         name: name || undefined,
         email,
         password,
       });
-      await login(response.token);
+      await login(response.token, response.user);
     } catch (err) {
       Toast.show({
         type: 'error',

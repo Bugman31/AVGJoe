@@ -2,8 +2,8 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  hasAnthropicKey: boolean;
-  createdAt: string;
+  hasAnthropicKey?: boolean; // not always returned by all endpoints
+  createdAt?: string;
 }
 
 export interface ExerciseSet {
