@@ -1,8 +1,8 @@
 """
 TesterAgent — generates and (optionally) runs tests:
-  - Unit tests
+  - Unit tests (Jest + React Native Testing Library for mobile; Jest for backend)
   - Integration tests
-  - E2E test scripts
+  - E2E test scripts (Playwright for web)
   - Test report
 """
 
@@ -18,10 +18,47 @@ ADMIN_PASSWORD = "Admin1234!"
 API_BASE_URL = "http://localhost:8000"
 FRONTEND_BASE_URL = "http://localhost:3000"
 
-SYSTEM_PROMPT = f"""You are the **Testing Agent** for the AVGJoe web application.
+# ── React Native / mobile unit-test guidance ─────────────────────────────────
+MOBILE_UNIT_TEST_GUIDE = """
+## React Native / Expo Unit Tests (mobile/ directory)
+
+Framework: Jest + React Native Testing Library (@testing-library/react-native)
+Test location: mobile/__tests__/<mirror of source path>
+Run command: cd mobile && npm test
+
+### Rules for mobile unit tests:
+1. **Components** — use `render()` from @testing-library/react-native.
+   - Assert rendered text with `getByText`.
+   - Assert interaction with `fireEvent.press` / `fireEvent.changeText`.
+   - Use `testID` props to query elements when text is ambiguous.
+   - Mock `expo-router` (useRouter, useLocalSearchParams) with jest.mock.
+   - Mock `expo-secure-store` — already set up in jest.setup.ts.
+
+2. **Hooks** — use `renderHook()` + `waitFor()` + `act()`.
+   - Mock `@/lib/api` module entirely: `jest.mock('@/lib/api')`.
+   - Test loading states, success paths, error paths, and refetch behaviour.
+
+3. **Context (AuthContext)** — render a consumer component that exposes state via testID.
+   - Test: initial loading, successful restore, failed restore (stays logged out),
+     login(), logout().
+
+4. **lib/auth.ts** — mock expo-secure-store, test every exported function.
+
+5. **lib/api.ts** — mock global.fetch + lib/auth; test request headers,
+   AUTH_EXPIRED handling, error extraction, JSON parsing.
+
+### File naming: `<ComponentName>.test.tsx` or `<module>.test.ts`
+### Import alias: use `@/` (mapped to mobile/ root in tsconfig paths)
+"""
+
+SYSTEM_PROMPT = f"""You are the **Testing Agent** for the AVGJoe application.
+The project has three testable layers:
+  1. **Backend** — Express API (Node/TypeScript, Jest unit tests + pytest integration tests)
+  2. **Web frontend** — Next.js (Playwright E2E tests)
+  3. **Mobile** — React Native / Expo (Jest + React Native Testing Library unit tests)
 
 You receive build output and generate comprehensive tests. Your responsibilities:
-1. Write unit tests for all new/modified functions and components.
+1. Write unit tests for all new/modified functions and components — for BOTH backend AND mobile.
 2. Write integration tests for API endpoints — **always** include:
    a. POST /api/auth/signup — create a brand-new random user and assert 201 + JWT returned.
    b. POST /api/auth/login  — log in with the seeded admin account ({ADMIN_EMAIL} / {ADMIN_PASSWORD})
@@ -46,8 +83,12 @@ You receive build output and generate comprehensive tests. Your responsibilities
    f. Profile update: log in, navigate to {FRONTEND_BASE_URL}/profile, change the display name
       to a new value, click Save, assert a success confirmation is shown and the new name
       persists on the page.
-4. Evaluate whether the build meets the acceptance criteria from the plan.
-5. Report pass/fail with actionable feedback.
+4. Write React Native unit tests for ALL new/modified mobile components, hooks, and lib modules.
+   Follow the mobile unit test guide below exactly.
+5. Evaluate whether the build meets the acceptance criteria from the plan.
+6. Report pass/fail with actionable feedback.
+
+{MOBILE_UNIT_TEST_GUIDE}
 
 API base URL for integration tests: {API_BASE_URL}
 Frontend base URL for E2E tests: {FRONTEND_BASE_URL}
@@ -126,7 +167,16 @@ Generate a complete test suite for this build. Rules:
 
 3. For each acceptance criterion in the plan, generate targeted tests.
 
-4. Write complete, runnable file contents — no placeholders.
+4. REQUIRED — for every new/modified file under mobile/ (components, hooks, lib, context),
+   produce a corresponding unit test in mobile/__tests__/ using Jest + React Native Testing
+   Library. Follow the mobile unit test guide in the system prompt exactly.
+   - Components: test render output and interactions
+   - Hooks: test loading/success/error states using renderHook + waitFor
+   - lib/auth.ts: test every exported function with mocked expo-secure-store
+   - lib/api.ts: test request construction, auth headers, 401 handling, error parsing
+   - context/AuthContext: test initial load, login, logout, auth-expired callback
+
+5. Write complete, runnable file contents — no placeholders.
 """.strip()
 
         test_result = self.call_json(prompt, max_tokens=8192)

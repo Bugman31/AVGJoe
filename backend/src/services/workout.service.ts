@@ -19,6 +19,9 @@ interface CreateTemplateData {
   description?: string;
   isAiGenerated?: boolean;
   aiGoal?: string;
+  programId?: string;
+  weekNumber?: number;
+  dayOfWeek?: string;
   exercises: ExerciseInput[];
 }
 
@@ -74,6 +77,9 @@ export async function createTemplate(userId: string, data: CreateTemplateData) {
         description: data.description,
         isAiGenerated: data.isAiGenerated ?? false,
         aiGoal: data.aiGoal,
+        programId: data.programId,
+        weekNumber: data.weekNumber,
+        dayOfWeek: data.dayOfWeek,
         exercises: {
           create: data.exercises.map((ex) => ({
             name: ex.name,

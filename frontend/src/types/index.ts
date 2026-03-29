@@ -30,9 +30,20 @@ export interface WorkoutTemplate {
   description: string | null
   isAiGenerated: boolean
   aiGoal: string | null
+  programId: string | null
+  weekNumber: number | null
+  dayOfWeek: string | null
   createdAt: string
   updatedAt: string
   exercises: Exercise[]
+}
+
+export interface AiProgram {
+  programId: string
+  programName: string
+  programDescription: string
+  totalWeeks: number
+  templates: WorkoutTemplate[]
 }
 
 export interface SessionSet {

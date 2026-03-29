@@ -27,6 +27,9 @@ model WorkoutTemplate {
   description   String?
   isAiGenerated Boolean  @default(false)
   aiGoal        String?
+  programId     String?  // Groups workouts from the same AI-generated program
+  weekNumber    Int?     // Week number in a multi-week program (1, 2, 3 ...)
+  dayOfWeek     String?  // Day this workout is scheduled ("Monday", "Tuesday", etc.)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -35,6 +38,7 @@ model WorkoutTemplate {
   sessions  WorkoutSession[]
 
   @@index([userId])
+  @@index([userId, programId])
 }
 
 model Exercise {

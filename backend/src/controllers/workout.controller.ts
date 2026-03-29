@@ -19,12 +19,16 @@ const exerciseSchema = z.object({
 const createTemplateSchema = z.object({
   name: z.string().min(1, 'Template name is required').max(200),
   description: z.string().max(1000).nullable().optional(),
+  weekNumber: z.number().int().min(1).max(52).nullable().optional(),
+  dayOfWeek: z.string().max(20).nullable().optional(),
   exercises: z.array(exerciseSchema).min(1, 'At least one exercise is required'),
 });
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
+  weekNumber: z.number().int().min(1).max(52).nullable().optional(),
+  dayOfWeek: z.string().max(20).nullable().optional(),
   exercises: z.array(exerciseSchema).optional(),
 });
 
@@ -61,7 +65,11 @@ export async function create(
 ): Promise<void> {
   try {
     const body = createTemplateSchema.parse(req.body);
-    const template = await workoutService.createTemplate(req.user.id, body);
+    const template = await workoutService.createTemplate(req.user.id, {
+      ...body,
+      weekNumber: body.weekNumber ?? undefined,
+      dayOfWeek: body.dayOfWeek ?? undefined,
+    });
     res.status(201).json({ template });
   } catch (err) {
     next(err);

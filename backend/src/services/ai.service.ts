@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { randomUUID } from 'crypto';
 import { prisma } from '../utils/prisma';
 import { env } from '../config/env';
 import { decrypt } from '../utils/crypto';
@@ -25,90 +26,122 @@ interface AiExercise {
   sets: AiExerciseSet[];
 }
 
-interface AiWorkoutPlan {
+interface AiWorkout {
   name: string;
   description: string;
+  weekNumber: number;
+  dayOfWeek: string;
   exercises: AiExercise[];
 }
 
+interface AiProgram {
+  programName: string;
+  programDescription: string;
+  totalWeeks: number;
+  workouts: AiWorkout[];
+}
+
 function buildSystemPrompt(): string {
-  return `You are an expert certified personal trainer with deep knowledge of exercise science, programming, and periodization. Your role is to create safe, effective, and personalized workout programs.
+  return `You are an expert certified personal trainer with deep knowledge of exercise science, programming, and periodization. Your role is to create safe, effective, and personalized multi-week workout programs.
 
-When creating workouts:
-- Always prioritize proper form and injury prevention
+When creating programs:
+- Design a full multi-week program (e.g. 4 weeks) with workouts for each training day
+- Each week should have progressive overload — slightly increase reps, sets, or weight over the weeks
 - Scale intensity to the user's fitness level
-- Include appropriate warm-up considerations in exercise notes
-- Use evidence-based rep/set schemes
-- Provide clear, actionable notes for each exercise
+- Include appropriate notes for each exercise (form cues, warm-up considerations)
+- Use evidence-based rep/set schemes (e.g. 3-5 sets, 5-15 reps)
+- Vary the movements across days (push/pull/legs, upper/lower, or full-body splits)
 
-You must ALWAYS respond with valid JSON matching this exact schema:
+You must ALWAYS respond with valid JSON matching this exact schema — no text outside the JSON:
 {
-  "name": "string",
-  "description": "string",
-  "exercises": [
+  "programName": "string",
+  "programDescription": "string",
+  "totalWeeks": 4,
+  "workouts": [
     {
       "name": "string",
-      "orderIndex": 0,
-      "notes": "string",
-      "sets": [
+      "description": "string",
+      "weekNumber": 1,
+      "dayOfWeek": "Monday",
+      "exercises": [
         {
-          "setNumber": 1,
-          "targetReps": 10,
-          "targetWeight": null,
-          "unit": "kg"
+          "name": "string",
+          "orderIndex": 0,
+          "notes": "string",
+          "sets": [
+            {
+              "setNumber": 1,
+              "targetReps": 10,
+              "targetWeight": null,
+              "unit": "kg"
+            }
+          ]
         }
       ]
     }
   ]
 }
 
+dayOfWeek must be one of: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
 Do not include any text outside the JSON object. Do not use markdown code blocks.`;
 }
 
 function buildUserPrompt(data: GenerateWorkoutData): string {
-  const parts = [`Create a workout program for the following goal: ${data.goal}`];
+  const parts = [`Create a complete multi-week workout program for: ${data.goal}`];
 
   if (data.fitnessLevel) {
     parts.push(`Fitness level: ${data.fitnessLevel}`);
   }
   if (data.daysPerWeek) {
-    parts.push(`Days per week available: ${data.daysPerWeek}`);
+    parts.push(`Training days per week: ${data.daysPerWeek}`);
   }
   if (data.equipment) {
     parts.push(`Available equipment: ${data.equipment}`);
   }
 
   parts.push(
-    'Return ONLY a valid JSON object with the workout plan. No markdown, no explanation, just the JSON.'
+    'Generate a 4-week progressive program. Return ONLY the JSON object — no markdown, no explanation.'
   );
 
   return parts.join('\n');
 }
 
-function parseWorkoutJson(text: string): AiWorkoutPlan {
-  // Strip markdown code blocks if present
+function parseJson(text: string): unknown {
   const stripped = text.replace(/```(?:json)?\n?/g, '').trim();
-  return JSON.parse(stripped) as AiWorkoutPlan;
+  return JSON.parse(stripped);
 }
 
-function validateWorkoutPlan(plan: unknown): plan is AiWorkoutPlan {
+function validateProgram(plan: unknown): plan is AiProgram {
   if (typeof plan !== 'object' || plan === null) return false;
   const p = plan as Record<string, unknown>;
-  if (typeof p.name !== 'string') return false;
-  if (typeof p.description !== 'string') return false;
-  if (!Array.isArray(p.exercises)) return false;
+  if (typeof p.programName !== 'string') return false;
+  if (!Array.isArray(p.workouts) || p.workouts.length === 0) return false;
   return true;
 }
 
+async function callClaude(
+  client: Anthropic,
+  messages: Anthropic.MessageParam[],
+): Promise<string> {
+  const message = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8000,
+    system: buildSystemPrompt(),
+    messages,
+  });
+  const block = message.content[0];
+  if (block.type !== 'text') throw new Error('Unexpected response type from AI');
+  return block.text;
+}
+
 export async function generateWorkout(userId: string, data: GenerateWorkoutData) {
-  // Resolve API key: user key takes priority, fall back to env
+  // Resolve API key
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { anthropicApiKey: true },
   });
 
   let apiKey: string | undefined;
-
   if (user?.anthropicApiKey) {
     apiKey = decrypt(user.anthropicApiKey);
   } else if (env.ANTHROPIC_API_KEY) {
@@ -124,93 +157,84 @@ export async function generateWorkout(userId: string, data: GenerateWorkoutData)
   }
 
   const client = new Anthropic({ apiKey });
-
-  const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(data);
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
 
   // First attempt
   let responseText: string;
   try {
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const block = message.content[0];
-    if (block.type !== 'text') {
-      throw new Error('Unexpected response type from AI');
-    }
-    responseText = block.text;
+    responseText = await callClaude(client, messages);
   } catch (err) {
     if ((err as Error & { statusCode?: number }).statusCode === 400) throw err;
     throw new Error(`AI generation failed: ${(err as Error).message}`);
   }
 
-  // Try to parse, retry once with correction if parse fails
-  let plan: AiWorkoutPlan;
+  // Parse — retry once if needed
+  let program: AiProgram;
   try {
-    const parsed = parseWorkoutJson(responseText);
-    if (!validateWorkoutPlan(parsed)) {
-      throw new Error('Invalid workout plan structure');
-    }
-    plan = parsed;
+    const parsed = parseJson(responseText);
+    if (!validateProgram(parsed)) throw new Error('Invalid program structure');
+    program = parsed;
   } catch {
-    // Retry with correction prompt
-    const correctionMessage = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt },
-        { role: 'assistant', content: responseText },
-        {
-          role: 'user',
-          content:
-            'Your previous response was not valid JSON. Please respond with ONLY the JSON object, no markdown formatting, no code blocks, no extra text.',
-        },
-      ],
+    messages.push({ role: 'assistant', content: responseText });
+    messages.push({
+      role: 'user',
+      content: 'Your previous response was not valid JSON. Please respond with ONLY the JSON object, no markdown, no code blocks, no extra text.',
     });
 
-    const retryBlock = correctionMessage.content[0];
-    if (retryBlock.type !== 'text') {
-      throw new Error('Invalid response from AI on retry');
+    let retryText: string;
+    try {
+      retryText = await callClaude(client, messages);
+    } catch (err) {
+      throw new Error(`AI generation failed on retry: ${(err as Error).message}`);
     }
 
     try {
-      const retryParsed = parseWorkoutJson(retryBlock.text);
-      if (!validateWorkoutPlan(retryParsed)) {
-        throw new Error('Invalid workout plan structure after retry');
-      }
-      plan = retryParsed;
+      const retryParsed = parseJson(retryText);
+      if (!validateProgram(retryParsed)) throw new Error('Invalid program structure after retry');
+      program = retryParsed;
     } catch {
       const parseErr = new Error(
-        'Failed to parse AI-generated workout plan. Please try again.'
+        'Failed to parse AI-generated workout program. Please try again.'
       ) as Error & { statusCode: number };
       parseErr.statusCode = 422;
       throw parseErr;
     }
   }
 
-  // Persist the generated template
-  const template = await createTemplate(userId, {
-    name: plan.name,
-    description: plan.description,
-    isAiGenerated: true,
-    aiGoal: data.goal,
-    exercises: plan.exercises.map((ex) => ({
-      name: ex.name,
-      orderIndex: ex.orderIndex,
-      notes: ex.notes,
-      sets: ex.sets.map((s) => ({
-        setNumber: s.setNumber,
-        targetReps: s.targetReps ?? undefined,
-        targetWeight: s.targetWeight ?? undefined,
-        unit: s.unit ?? 'kg',
-      })),
-    })),
-  });
+  // Persist all workouts under a shared programId
+  const programId = randomUUID();
 
-  return template;
+  const templates = await Promise.all(
+    program.workouts.map((workout) =>
+      createTemplate(userId, {
+        name: workout.name,
+        description: workout.description,
+        isAiGenerated: true,
+        aiGoal: data.goal,
+        programId,
+        weekNumber: workout.weekNumber,
+        dayOfWeek: workout.dayOfWeek,
+        exercises: workout.exercises.map((ex) => ({
+          name: ex.name,
+          orderIndex: ex.orderIndex,
+          notes: ex.notes ?? undefined,
+          sets: ex.sets.map((s) => ({
+            setNumber: s.setNumber,
+            targetReps: s.targetReps ?? undefined,
+            targetWeight: s.targetWeight ?? undefined,
+            unit: s.unit ?? 'kg',
+          })),
+        })),
+      })
+    )
+  );
+
+  return {
+    programId,
+    programName: program.programName,
+    programDescription: program.programDescription,
+    totalWeeks: program.totalWeeks,
+    templates,
+  };
 }
