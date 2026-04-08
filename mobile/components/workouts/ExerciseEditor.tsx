@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { ExercisePickerModal, type PickedExercise } from './ExercisePickerModal';
 import { ExerciseInput, SetInput } from '@/types';
 import { colors, spacing, typography, radii } from '@/lib/theme';
 
@@ -14,8 +15,25 @@ interface ExerciseEditorProps {
 }
 
 export function ExerciseEditor({ exercise, index, onChange, onRemove }: ExerciseEditorProps) {
+  const [showPicker, setShowPicker] = useState(false);
+
   function updateName(name: string) {
     onChange(index, { ...exercise, name });
+  }
+
+  function handlePickedExercise(picked: PickedExercise) {
+    // Build default sets from library defaults
+    const defaultSets: SetInput[] = Array.from({ length: picked.defaultSets }, (_, i) => ({
+      setNumber: i + 1,
+      targetReps: picked.defaultReps,
+      targetWeight: undefined,
+      unit: 'lbs',
+    }));
+    onChange(index, {
+      ...exercise,
+      name: picked.name,
+      sets: defaultSets.length > 0 ? defaultSets : exercise.sets,
+    });
   }
 
   function updateSet(setIdx: number, field: keyof SetInput, value: string) {
@@ -30,9 +48,9 @@ export function ExerciseEditor({ exercise, index, onChange, onRemove }: Exercise
   function addSet() {
     const newSet: SetInput = {
       setNumber: exercise.sets.length + 1,
-      targetReps: undefined,
-      targetWeight: undefined,
-      unit: 'kg',
+      targetReps: exercise.sets[exercise.sets.length - 1]?.targetReps,
+      targetWeight: exercise.sets[exercise.sets.length - 1]?.targetWeight,
+      unit: 'lbs',
     };
     onChange(index, { ...exercise, sets: [...exercise.sets, newSet] });
   }
@@ -47,17 +65,35 @@ export function ExerciseEditor({ exercise, index, onChange, onRemove }: Exercise
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Input
-          value={exercise.name}
-          onChangeText={updateName}
-          placeholder="Exercise name"
-          style={styles.nameInput}
+        {/* Name picker button */}
+        <TouchableOpacity
+          style={[styles.namePicker, exercise.name ? styles.namePickerFilled : styles.namePickerEmpty]}
+          onPress={() => setShowPicker(true)}
           testID={`exercise-${index}-name`}
-        />
+          activeOpacity={0.7}
+        >
+          <Ionicons name="barbell-outline" size={15} color={exercise.name ? colors.accent : colors.textMuted} style={{ marginRight: 6 }} />
+          <Text
+            style={[styles.nameText, !exercise.name && styles.namePlaceholder]}
+            numberOfLines={1}
+          >
+            {exercise.name || 'Choose or type an exercise…'}
+          </Text>
+          <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+        </TouchableOpacity>
+
         <Pressable onPress={() => onRemove(index)} style={styles.removeBtn} testID={`exercise-${index}-remove`}>
           <Ionicons name="trash-outline" size={18} color={colors.danger} />
         </Pressable>
       </View>
+
+      {/* Inline name override when exercise is selected */}
+      {exercise.name ? (
+        <TouchableOpacity style={styles.changeRow} onPress={() => setShowPicker(true)}>
+          <Ionicons name="swap-horizontal-outline" size={12} color={colors.textMuted} />
+          <Text style={styles.changeText}>Change exercise</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.setsHeader}>
         <Text style={styles.colLabel}>Set</Text>
@@ -100,6 +136,15 @@ export function ExerciseEditor({ exercise, index, onChange, onRemove }: Exercise
       >
         + Add Set
       </Button>
+
+      <ExercisePickerModal
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        onSelect={(picked) => {
+          handlePickedExercise(picked);
+          setShowPicker(false);
+        }}
+      />
     </View>
   );
 }
@@ -118,8 +163,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  nameInput: {
+  namePicker: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  namePickerEmpty: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  namePickerFilled: {
+    backgroundColor: colors.accent + '12',
+    borderColor: colors.accent + '40',
+  },
+  nameText: {
+    flex: 1,
+    fontSize: typography.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  namePlaceholder: {
+    color: colors.textMuted,
+    fontWeight: '400',
+  },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: -4,
+  },
+  changeText: {
+    fontSize: typography.xs,
+    color: colors.textMuted,
   },
   removeBtn: {
     padding: spacing.xs,

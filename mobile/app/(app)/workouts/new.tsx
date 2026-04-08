@@ -30,7 +30,7 @@ export default function NewWorkoutScreen() {
   function addExercise() {
     setExercises((prev) => [
       ...prev,
-      { name: '', orderIndex: prev.length, sets: [{ setNumber: 1 }] },
+      { name: '', orderIndex: prev.length, sets: [{ setNumber: 1, targetReps: undefined, targetWeight: undefined }] },
     ]);
   }
 
