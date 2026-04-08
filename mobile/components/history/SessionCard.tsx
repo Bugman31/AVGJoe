@@ -9,6 +9,7 @@ import { colors, spacing, typography } from '@/lib/theme';
 
 interface SessionCardProps {
   session: WorkoutSession;
+  onPress?: () => void;
   testID?: string;
 }
 
@@ -28,13 +29,13 @@ function formatDuration(start: string, end: string | null): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-export function SessionCard({ session, testID }: SessionCardProps) {
+export function SessionCard({ session, onPress, testID }: SessionCardProps) {
   const router = useRouter();
   const uniqueExercises = new Set(session.sets.map((s) => s.exerciseName)).size;
   const totalSets = session.sets.length;
 
   return (
-    <Pressable onPress={() => router.push(`/history/${session.id}`)} testID={testID}>
+    <Pressable onPress={onPress ?? (() => router.push(`/history/${session.id}`))} testID={testID}>
       <Card>
         <View style={styles.header}>
           <Text style={styles.name} numberOfLines={1}>{session.name}</Text>

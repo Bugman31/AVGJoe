@@ -9,17 +9,18 @@ import { colors, spacing, typography } from '@/lib/theme';
 
 interface WorkoutCardProps {
   workout: WorkoutTemplate;
+  onPress?: () => void;
   testID?: string;
 }
 
-export function WorkoutCard({ workout, testID }: WorkoutCardProps) {
+export function WorkoutCard({ workout, onPress, testID }: WorkoutCardProps) {
   const router = useRouter();
   const exerciseCount = workout.exercises.length;
   const setCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
 
   return (
     <Pressable
-      onPress={() => router.push(`/workouts/${workout.id}`)}
+      onPress={onPress ?? (() => router.push(`/workouts/${workout.id}`))}
       testID={testID}
     >
       <Card>

@@ -76,6 +76,7 @@ describe('login — admin account', () => {
       passwordHash,
       createdAt: new Date(),
       updatedAt: new Date(),
+      profile: null,
     });
 
     const result = await authService.login(ADMIN_EMAIL, ADMIN_PASSWORD);
@@ -88,12 +89,45 @@ describe('login — admin account', () => {
     expect(payload.sub).toBe('admin-id');
   });
 
+  it('returns onboardingCompleted: false when user has no profile', async () => {
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+      id: 'admin-id',
+      email: ADMIN_EMAIL,
+      name: 'Admin',
+      passwordHash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      profile: null,
+    });
+
+    const result = await authService.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    expect(result.user.onboardingCompleted).toBe(false);
+  });
+
+  it('returns onboardingCompleted: true when user has completed onboarding', async () => {
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+      id: 'admin-id',
+      email: ADMIN_EMAIL,
+      name: 'Admin',
+      passwordHash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      profile: { onboardingCompleted: true },
+    });
+
+    const result = await authService.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    expect(result.user.onboardingCompleted).toBe(true);
+  });
+
   it('throws 401 when admin password is wrong', async () => {
     const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: 'admin-id',
       email: ADMIN_EMAIL,
       passwordHash,
+      profile: null,
     });
 
     await expect(authService.login(ADMIN_EMAIL, 'WrongPassword!')).rejects.toMatchObject({

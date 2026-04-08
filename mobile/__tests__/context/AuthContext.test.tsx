@@ -17,7 +17,10 @@ const mockUser = {
   name: 'Test User',
   hasAnthropicKey: false,
   createdAt: new Date().toISOString(),
+  onboardingCompleted: true,
 };
+
+const mockUserNoOnboarding = { ...mockUser, onboardingCompleted: false };
 
 // Consumer component that exposes auth state for testing
 function TestConsumer() {
@@ -27,6 +30,7 @@ function TestConsumer() {
       <Text testID="loading">{String(isLoading)}</Text>
       <Text testID="authenticated">{String(isAuthenticated)}</Text>
       <Text testID="user">{user?.email ?? 'none'}</Text>
+      <Text testID="onboarding">{String(user?.onboardingCompleted ?? 'undefined')}</Text>
     </>
   );
 }
@@ -157,5 +161,73 @@ describe('AuthContext', () => {
 
     expect(mockAuthLib.removeToken).toHaveBeenCalled();
     expect(getByTestId('authenticated').props.children).toBe('false');
+  });
+
+  it('restoreSession sets onboardingCompleted from /me response', async () => {
+    (mockApiLib.api.get as jest.Mock).mockResolvedValueOnce({ user: mockUserNoOnboarding });
+
+    const { getByTestId } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(getByTestId('loading').props.children).toBe('false'));
+    expect(getByTestId('onboarding').props.children).toBe('false');
+  });
+
+  it('login() sets onboardingCompleted from userData', async () => {
+    (mockApiLib.api.get as jest.Mock).mockRejectedValueOnce(new Error('no session'));
+
+    let loginFn: (token: string, userData?: typeof mockUser) => Promise<void>;
+    function LoginConsumer() {
+      const { login } = useAuth();
+      loginFn = login;
+      return <TestConsumer />;
+    }
+
+    const { getByTestId } = render(
+      <AuthProvider>
+        <LoginConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('loading').props.children).toBe('false'));
+
+    await act(async () => {
+      await loginFn!('valid-token', { ...mockUser, onboardingCompleted: false });
+    });
+
+    expect(getByTestId('onboarding').props.children).toBe('false');
+  });
+
+  it('refreshUser() updates user without calling storeToken', async () => {
+    // restoreSession returns user without onboarding
+    (mockApiLib.api.get as jest.Mock)
+      .mockResolvedValueOnce({ user: mockUserNoOnboarding })
+      // refreshUser call returns user with onboarding complete
+      .mockResolvedValueOnce({ user: mockUser });
+
+    let refreshFn: () => Promise<void>;
+    function RefreshConsumer() {
+      const { refreshUser } = useAuth();
+      refreshFn = refreshUser;
+      return <TestConsumer />;
+    }
+
+    const { getByTestId } = render(
+      <AuthProvider>
+        <RefreshConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('onboarding').props.children).toBe('false'));
+
+    await act(async () => {
+      await refreshFn!();
+    });
+
+    // storeToken must NOT have been called — token is untouched
+    expect(mockAuthLib.storeToken).not.toHaveBeenCalled();
+    expect(getByTestId('onboarding').props.children).toBe('true');
+    expect(getByTestId('authenticated').props.children).toBe('true');
   });
 });

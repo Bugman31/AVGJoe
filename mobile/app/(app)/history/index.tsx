@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { SessionCard } from '@/components/history/SessionCard';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
@@ -9,6 +10,7 @@ import { WorkoutSession } from '@/types';
 import { colors, spacing, typography } from '@/lib/theme';
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +56,9 @@ export default function HistoryScreen() {
             <Ionicons name="time-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No sessions yet</Text>
             <Text style={styles.emptyText}>Complete a workout to see it here.</Text>
+            <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/(app)/workouts')}>
+              <Text style={styles.emptyCtaText}>Start a Workout</Text>
+            </TouchableOpacity>
           </View>
         }
       />
@@ -78,4 +83,12 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxl * 2 },
   emptyTitle: { fontSize: typography.xl, fontWeight: '600', color: colors.textSecondary },
   emptyText: { fontSize: typography.sm, color: colors.textMuted, textAlign: 'center' },
+  emptyCta: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+  },
+  emptyCtaText: { fontSize: typography.md, fontWeight: '600', color: '#fff' },
 });

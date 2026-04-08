@@ -8,6 +8,10 @@ import authRoutes from './routes/auth.routes';
 import workoutRoutes from './routes/workout.routes';
 import sessionRoutes from './routes/session.routes';
 import aiRoutes from './routes/ai.routes';
+import profileRoutes from './routes/profile.routes';
+import exerciseRoutes from './routes/exercise.routes';
+import programRoutes from './routes/program.routes';
+import analysisRoutes from './routes/analysis.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
@@ -46,6 +50,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/exercises', exerciseRoutes);
+app.use('/api/programs', programRoutes);
+app.use('/api/analysis', analysisRoutes);
 
 // 404 handler
 app.use((_req, res) => {

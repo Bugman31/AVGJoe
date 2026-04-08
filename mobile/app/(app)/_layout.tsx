@@ -7,13 +7,7 @@ import { colors } from '@/lib/theme';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
-function TabIcon({
-  name,
-  focused,
-}: {
-  name: IoniconsName;
-  focused: boolean;
-}) {
+function TabIcon({ name, focused }: { name: IoniconsName; focused: boolean }) {
   return (
     <Ionicons
       name={focused ? name : (`${name}-outline` as IoniconsName)}
@@ -24,10 +18,11 @@ function TabIcon({
 }
 
 export default function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) return <Spinner fullScreen />;
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  if (user?.onboardingCompleted === false) return <Redirect href="/(onboarding)/" />;
 
   return (
     <Tabs
@@ -44,31 +39,31 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="home"
         options={{
-          title: 'Dashboard',
+          title: 'Home',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="workouts"
         options={{
-          title: 'Workouts',
+          title: 'Workout',
           tabBarIcon: ({ focused }) => <TabIcon name="barbell" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="ai"
+        name="progress"
         options={{
-          title: 'AI',
-          tabBarIcon: ({ focused }) => <TabIcon name="sparkles" focused={focused} />,
+          title: 'Progress',
+          tabBarIcon: ({ focused }) => <TabIcon name="trending-up" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="program"
         options={{
-          title: 'History',
-          tabBarIcon: ({ focused }) => <TabIcon name="time" focused={focused} />,
+          title: 'Program',
+          tabBarIcon: ({ focused }) => <TabIcon name="calendar" focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -78,6 +73,10 @@ export default function AppLayout() {
           tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} />,
         }}
       />
+      {/* Hide old tabs from navigation — kept for backwards compat routes */}
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="ai" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
     </Tabs>
   );
 }

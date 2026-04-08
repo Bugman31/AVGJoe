@@ -15,10 +15,16 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.avgjoe.workouttracker",
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      },
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSHealthShareUsageDescription": "Average Joe's reads your Apple Watch workout data to import sessions and activity.",
+        "NSHealthUpdateUsageDescription": "Average Joe's writes your completed workouts to Apple Health to keep your fitness data in sync."
       }
     },
     "android": {

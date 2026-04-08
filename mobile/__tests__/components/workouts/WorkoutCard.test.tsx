@@ -73,11 +73,28 @@ describe('WorkoutCard', () => {
     expect(queryByText('AI')).toBeNull();
   });
 
-  it('navigates to workout detail on press', () => {
+  // Feature 21: entire card is tappable, not just the "Start Workout" link
+  it('navigates to workout detail when entire card is pressed', () => {
     const { getByTestId } = render(
       <WorkoutCard workout={baseTemplate} testID="wcard" />,
     );
     fireEvent.press(getByTestId('wcard'));
     expect(mockRouter.push).toHaveBeenCalledWith('/workouts/tmpl-1');
+  });
+
+  it('calls custom onPress when provided instead of navigating', () => {
+    const customPress = jest.fn();
+    const { getByTestId } = render(
+      <WorkoutCard workout={baseTemplate} onPress={customPress} testID="wcard" />,
+    );
+    fireEvent.press(getByTestId('wcard'));
+    expect(customPress).toHaveBeenCalled();
+    expect(mockRouter.push).not.toHaveBeenCalled();
+  });
+
+  it('does not render description when absent', () => {
+    const noDesc = { ...baseTemplate, description: null };
+    const { queryByText } = render(<WorkoutCard workout={noDesc} />);
+    expect(queryByText('Chest, shoulders, triceps')).toBeNull();
   });
 });

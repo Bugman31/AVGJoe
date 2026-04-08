@@ -5,5 +5,8 @@ export const prisma = {
     create: jest.fn(),
     update: jest.fn(),
   },
+  userProfile: {
+    findUnique: jest.fn(),
+  },
   $disconnect: jest.fn(),
 };

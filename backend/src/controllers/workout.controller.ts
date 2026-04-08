@@ -67,8 +67,10 @@ export async function create(
     const body = createTemplateSchema.parse(req.body);
     const template = await workoutService.createTemplate(req.user.id, {
       ...body,
+      description: body.description ?? undefined,
       weekNumber: body.weekNumber ?? undefined,
       dayOfWeek: body.dayOfWeek ?? undefined,
+      exercises: body.exercises.map((ex) => ({ ...ex, notes: ex.notes ?? undefined })),
     });
     res.status(201).json({ template });
   } catch (err) {
@@ -82,7 +84,12 @@ export async function update(
   next: NextFunction
 ): Promise<void> {
   try {
-    const body = updateTemplateSchema.parse(req.body);
+    const rawBody = updateTemplateSchema.parse(req.body);
+    const body = {
+      ...rawBody,
+      description: rawBody.description ?? undefined,
+      exercises: rawBody.exercises?.map((ex) => ({ ...ex, notes: ex.notes ?? undefined })),
+    };
     const template = await workoutService.updateTemplate(req.params.id, req.user.id, body);
     res.json({ template });
   } catch (err) {

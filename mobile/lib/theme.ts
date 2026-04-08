@@ -55,6 +55,19 @@ export const typography = {
   xxxl: 28,
 };
 
+// Convenience alias — components can import `theme` or `colors` interchangeably
+export const theme = {
+  colors: {
+    ...colors,
+    primary: colors.accent,
+    primaryHover: colors.accentHover,
+    primaryLight: colors.accentLight,
+  },
+  spacing,
+  radii,
+  typography,
+};
+
 export const shadows = StyleSheet.create({
   card: {
     shadowColor: '#000',

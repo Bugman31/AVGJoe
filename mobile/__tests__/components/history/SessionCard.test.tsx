@@ -64,11 +64,28 @@ describe('SessionCard', () => {
     expect(getByText('Felt strong today')).toBeTruthy();
   });
 
-  it('navigates to session detail on press', () => {
+  it('does not render notes section when absent', () => {
+    const noNotes = { ...completedSession, notes: null };
+    const { queryByText } = render(<SessionCard session={noNotes} />);
+    expect(queryByText('Felt strong today')).toBeNull();
+  });
+
+  // Feature 21: entire card is tappable
+  it('navigates to session detail when entire card is pressed', () => {
     const { getByTestId } = render(
       <SessionCard session={completedSession} testID="scard" />,
     );
     fireEvent.press(getByTestId('scard'));
     expect(mockRouter.push).toHaveBeenCalledWith('/history/session-1');
+  });
+
+  it('calls custom onPress instead of navigating when provided', () => {
+    const customPress = jest.fn();
+    const { getByTestId } = render(
+      <SessionCard session={completedSession} onPress={customPress} testID="scard" />,
+    );
+    fireEvent.press(getByTestId('scard'));
+    expect(customPress).toHaveBeenCalled();
+    expect(mockRouter.push).not.toHaveBeenCalled();
   });
 });

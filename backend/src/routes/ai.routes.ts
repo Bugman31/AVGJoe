@@ -21,6 +21,20 @@ const aiRateLimiter = rateLimit({
   },
 });
 
+const programRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = req.user?.id ?? 'anonymous';
+    const ip = req.ip ?? 'unknown';
+    return `${ip}:${userId}:program`;
+  },
+  message: { error: 'Too many program generation requests. Please try again in an hour.' },
+});
+
 router.post('/generate', authMiddleware, aiRateLimiter, aiController.generate);
+router.post('/generate-program', authMiddleware, programRateLimiter, aiController.generateProgram);
 
 export default router;

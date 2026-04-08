@@ -1,6 +1,20 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
-import { WorkoutSession, LogSetInput } from '@/types';
+import type { WorkoutSession, LogSetInput } from '@/types';
+
+interface StartSessionPayload {
+  name: string;
+  templateId?: string;
+  plannedWorkoutId?: string;
+  programId?: string;
+  preEnergyLevel?: number;
+}
+
+interface CompleteSessionPayload {
+  notes?: string;
+  postEnergyLevel?: number;
+  sorenessLevel?: number;
+}
 
 interface UseSessionResult {
   session: WorkoutSession | null;
@@ -8,7 +22,7 @@ interface UseSessionResult {
   error: string | null;
   startSession: (templateId: string, name: string) => Promise<WorkoutSession>;
   logSet: (sessionId: string, payload: LogSetInput) => Promise<void>;
-  completeSession: (sessionId: string, notes?: string) => Promise<WorkoutSession>;
+  completeSession: (sessionId: string, notesOrPayload?: string | CompleteSessionPayload) => Promise<WorkoutSession>;
 }
 
 export function useSession(): UseSessionResult {
@@ -20,10 +34,7 @@ export function useSession(): UseSessionResult {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.post<{ session: WorkoutSession }>('/api/sessions/start', {
-        templateId,
-        name,
-      });
+      const response = await api.post<{ session: WorkoutSession }>('/api/sessions/start', { templateId, name });
       setSession(response.session);
       return response.session;
     } catch (err) {
@@ -45,13 +56,20 @@ export function useSession(): UseSessionResult {
     }
   }, []);
 
-  const completeSession = useCallback(async (sessionId: string, notes?: string): Promise<WorkoutSession> => {
+  const completeSession = useCallback(async (
+    sessionId: string,
+    notesOrPayload?: string | CompleteSessionPayload
+  ): Promise<WorkoutSession> => {
     setIsLoading(true);
     setError(null);
+    const payload: CompleteSessionPayload =
+      typeof notesOrPayload === 'string'
+        ? { notes: notesOrPayload }
+        : notesOrPayload ?? {};
     try {
       const response = await api.patch<{ session: WorkoutSession }>(
         `/api/sessions/${sessionId}/complete`,
-        { notes },
+        payload
       );
       setSession(response.session);
       return response.session;

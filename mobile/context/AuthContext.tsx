@@ -9,6 +9,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (token: string, userData?: User) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   login: async () => {},
   logout: async () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -59,6 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Refreshes user data from /me without touching the stored token.
+  // Use this after operations that change user state (e.g. onboarding completion).
+  const refreshUser = useCallback(async () => {
+    const response = await api.get<{ user: User }>('/api/auth/me');
+    setUser(response.user);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -67,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

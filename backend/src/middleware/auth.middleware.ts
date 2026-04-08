@@ -29,10 +29,30 @@ export async function authMiddleware(
     return;
   }
 
-  const user = await prisma.user.findUnique({
+  const userWithProfile = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, name: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      anthropicApiKey: true,
+      openaiApiKey: true,
+      aiProvider: true,
+      profile: { select: { onboardingCompleted: true } },
+    },
   });
+
+  const user = userWithProfile
+    ? {
+        id: userWithProfile.id,
+        email: userWithProfile.email,
+        name: userWithProfile.name,
+        onboardingCompleted: userWithProfile.profile?.onboardingCompleted ?? false,
+        hasAnthropicKey: !!userWithProfile.anthropicApiKey,
+        hasOpenAiKey: !!userWithProfile.openaiApiKey,
+        aiProvider: (userWithProfile.aiProvider ?? 'anthropic') as 'anthropic' | 'openai',
+      }
+    : null;
 
   if (!user) {
     res.status(401).json({ error: 'User not found' });

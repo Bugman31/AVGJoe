@@ -5,6 +5,10 @@ import * as sessionService from '../services/session.service';
 const startSessionSchema = z.object({
   name: z.string().min(1, 'Session name is required').max(200),
   templateId: z.string().cuid().optional(),
+  plannedWorkoutId: z.string().optional(),
+  programId: z.string().optional(),
+  preEnergyLevel: z.number().int().min(1).max(10).optional(),
+  startedAt: z.string().datetime().optional(),
 });
 
 const logSetSchema = z.object({
@@ -13,11 +17,14 @@ const logSetSchema = z.object({
   setNumber: z.number().int().min(1),
   actualReps: z.number().int().min(0).optional(),
   actualWeight: z.number().min(0).optional(),
-  unit: z.string().default('kg'),
+  unit: z.string().default('lbs'),
+  rpe: z.number().int().min(1).max(10).optional(),
 });
 
 const completeSessionSchema = z.object({
   notes: z.string().max(2000).optional(),
+  postEnergyLevel: z.number().int().min(1).max(10).optional(),
+  sorenessLevel: z.number().int().min(1).max(10).optional(),
 });
 
 export async function startSession(
@@ -85,12 +92,23 @@ export async function completeSession(
 ): Promise<void> {
   try {
     const body = completeSessionSchema.parse(req.body);
-    const session = await sessionService.completeSession(
-      req.params.id,
-      req.user.id,
-      body.notes
-    );
+    const session = await sessionService.completeSession(req.params.id, req.user.id, body);
     res.json({ session });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getLastExercise(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const exerciseName = decodeURIComponent(req.params.exerciseName);
+    const excludeSessionId = req.query.excludeSession as string | undefined;
+    const sets = await sessionService.getLastExerciseData(req.user.id, exerciseName, excludeSessionId);
+    res.json({ sets, exerciseName });
   } catch (err) {
     next(err);
   }

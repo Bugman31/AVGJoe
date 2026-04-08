@@ -55,7 +55,8 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.logo}>AVGJoe</Text>
+          <Text style={styles.logo}>Average Joe's</Text>
+          <Text style={styles.appSubtitle}>Workout Tracker</Text>
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
         </View>
@@ -115,10 +116,18 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   logo: {
-    fontSize: 36,
+    fontSize: 30,
     fontWeight: '900',
     color: colors.accent,
     letterSpacing: -1,
+  },
+  appSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: -4,
   },
   title: {
     fontSize: typography.xxl,

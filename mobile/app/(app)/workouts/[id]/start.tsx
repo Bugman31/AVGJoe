@@ -98,7 +98,7 @@ export default function StartWorkoutScreen() {
     try {
       await completeSession(sessionId, notes || undefined);
       Toast.show({ type: 'success', text1: 'Workout complete!' });
-      router.replace('/history');
+      router.replace(`/(app)/workouts/${sessionId}/summary`);
     } catch {
       Toast.show({ type: 'error', text1: 'Failed to complete session' });
       setIsCompleting(false);
