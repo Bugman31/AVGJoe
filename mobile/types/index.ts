@@ -235,7 +235,8 @@ export interface WorkoutSession {
   completionScore?: number | null;
   performanceScore?: number | null;
   aiSummary?: string | null;
-  sets: SessionSet[];
+  sets?: SessionSet[];
+  _count?: { sets: number };
 }
 
 export interface ProgressDataPoint {

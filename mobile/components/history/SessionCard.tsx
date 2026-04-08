@@ -31,8 +31,9 @@ function formatDuration(start: string, end: string | null): string {
 
 export function SessionCard({ session, onPress, testID }: SessionCardProps) {
   const router = useRouter();
-  const uniqueExercises = new Set(session.sets.map((s) => s.exerciseName)).size;
-  const totalSets = session.sets.length;
+  const sets = session.sets ?? [];
+  const uniqueExercises = new Set(sets.map((s) => s.exerciseName)).size;
+  const totalSets = sets.length > 0 ? sets.length : (session._count?.sets ?? 0);
 
   return (
     <Pressable onPress={onPress ?? (() => router.push(`/history/${session.id}`))} testID={testID}>
