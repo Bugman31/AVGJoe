@@ -24,6 +24,22 @@ model User {
   programs         Program[]
   plannedWorkouts  PlannedWorkout[]
   weeklyAnalyses   WeeklyAnalysis[]
+  bodyLogs         BodyLog[]
+}
+
+model BodyLog {
+  id        String   @id @default(cuid())
+  userId    String
+  weight    Float
+  unit      String   @default("lbs")
+  bodyFat   Float?
+  notes     String?
+  loggedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
 }
 
 model UserProfile {

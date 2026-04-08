@@ -382,6 +382,11 @@ export default function OnboardingScreen() {
             <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         </View>
+        {/* Progress bar */}
+        <Text style={styles.stepLabel}>Step {currentStep} of {totalSteps}</Text>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${(currentStep / totalSteps) * 100}%` }]} />
+        </View>
 
         {/* Step content */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -435,6 +440,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  stepLabel: { fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center', paddingVertical: 6 },
+  progressTrack: { height: 3, backgroundColor: theme.colors.border, overflow: 'hidden' },
+  progressFill: { height: 3, backgroundColor: theme.colors.primary },
   scrollView: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
   footer: { padding: 16, paddingBottom: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },

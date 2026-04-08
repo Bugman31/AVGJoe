@@ -17,5 +17,6 @@ router.get('/last-exercise/:exerciseName', sessionController.getLastExercise);
 router.get('/:id', sessionController.getSession);
 router.post('/:id/sets', sessionController.logSet);
 router.patch('/:id/complete', sessionController.completeSession);
+router.delete('/:id', sessionController.deleteSession);
 
 export default router;

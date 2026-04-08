@@ -3,11 +3,12 @@ import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
-import { colors } from '@/lib/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 function TabIcon({ name, focused }: { name: IoniconsName; focused: boolean }) {
+  const { colors } = useTheme();
   return (
     <Ionicons
       name={focused ? name : (`${name}-outline` as IoniconsName)}
@@ -19,6 +20,7 @@ function TabIcon({ name, focused }: { name: IoniconsName; focused: boolean }) {
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { colors } = useTheme();
 
   if (isLoading) return <Spinner fullScreen />;
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
@@ -60,6 +62,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="library"
+        options={{
+          title: 'Library',
+          tabBarIcon: ({ focused }) => <TabIcon name="book" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="program"
         options={{
           title: 'Program',
@@ -77,6 +86,7 @@ export default function AppLayout() {
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="ai" options={{ href: null }} />
       <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="body" options={{ href: null }} />
     </Tabs>
   );
 }

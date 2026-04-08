@@ -30,6 +30,7 @@ import * as Haptics from 'expo-haptics';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { RpePicker } from '@/components/workouts/RpePicker';
+import { PlateCalculatorModal } from '@/components/workouts/PlateCalculatorModal';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { saveWorkout } from '@/lib/healthkit';
@@ -77,6 +78,7 @@ export default function ActiveWorkoutScreen() {
 
   // RPE picker state
   const [rpePickerKey, setRpePickerKey] = useState<string | null>(null);
+  const [showPlateCalc, setShowPlateCalc] = useState(false);
 
   // Rest timer
   const restTimer = useRestTimer();
@@ -213,7 +215,13 @@ export default function ActiveWorkoutScreen() {
         }).catch(() => {});
       }
 
-      router.replace(`/(app)/workouts/${sessionId}/summary`);
+      const loggedCount = Object.values(setStates).filter((s) => s.logged).length;
+      const durationSecs = res.session.startedAt && res.session.completedAt
+        ? Math.round((new Date(res.session.completedAt).getTime() - new Date(res.session.startedAt).getTime()) / 1000)
+        : 0;
+      router.replace(
+        `/(app)/workouts/celebration?sessionId=${sessionId}&sessionName=${encodeURIComponent(res.session.name)}&setsLogged=${loggedCount}&duration=${durationSecs}`
+      );
     } catch {
       Toast.show({ type: 'error', text1: 'Failed to complete workout' });
       setIsCompleting(false);
@@ -239,10 +247,14 @@ export default function ActiveWorkoutScreen() {
         <Text style={styles.title} numberOfLines={1}>
           {plannedWorkout?.name ?? session?.name ?? 'Workout'}
         </Text>
-        {/* Timer duration selector */}
-        <TouchableOpacity onPress={() => setShowTimerSettings(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="timer-outline" size={22} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => setShowPlateCalc(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="barbell-outline" size={22} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowTimerSettings(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="timer-outline" size={22} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Warmup strip */}
@@ -461,6 +473,9 @@ export default function ActiveWorkoutScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Plate Calculator ───────────────────────────────────────── */}
+      <PlateCalculatorModal visible={showPlateCalc} onClose={() => setShowPlateCalc(false)} />
 
       {/* ── RPE Picker ─────────────────────────────────────────────── */}
       <RpePicker

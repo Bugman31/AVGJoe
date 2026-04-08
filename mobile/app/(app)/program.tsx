@@ -177,6 +177,38 @@ export default function ProgramScreen() {
               </View>
             </View>
 
+            {/* Next Workout */}
+            {(() => {
+              const nextWorkout = weekWorkouts.find((w) => !w.isCompleted);
+              if (!nextWorkout) return null;
+              return (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Up Next</Text>
+                  <TouchableOpacity
+                    style={nextStyles.card}
+                    onPress={() => router.push('/(app)/workouts')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={nextStyles.cardTop}>
+                      <Text style={nextStyles.day}>{nextWorkout.dayOfWeek}</Text>
+                      {nextWorkout.estimatedDuration && (
+                        <View style={nextStyles.durBadge}>
+                          <Ionicons name="time-outline" size={12} color={theme.colors.textSecondary} />
+                          <Text style={nextStyles.durText}>{nextWorkout.estimatedDuration} min</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={nextStyles.name}>{nextWorkout.name}</Text>
+                    {nextWorkout.focus && <Text style={nextStyles.focus}>{nextWorkout.focus}</Text>}
+                    <View style={nextStyles.startBtn}>
+                      <Ionicons name="play" size={14} color="#fff" />
+                      <Text style={nextStyles.startBtnText}>Start Now</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+
             {/* This week's schedule */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Week {program.currentWeek} Schedule</Text>
@@ -332,6 +364,24 @@ const cardStyles = StyleSheet.create({
   workoutName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   focus: { fontSize: 12, color: theme.colors.primary },
   meta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+});
+
+const nextStyles = StyleSheet.create({
+  card: {
+    backgroundColor: theme.colors.surface, borderRadius: 14, padding: 16,
+    borderWidth: 1.5, borderColor: theme.colors.primary + '60', gap: 6,
+  },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  day: { fontSize: 11, fontWeight: '700', color: theme.colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  durBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  durText: { fontSize: 11, color: theme.colors.textSecondary },
+  name: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  focus: { fontSize: 13, color: theme.colors.primary },
+  startBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: theme.colors.primary, borderRadius: 10, paddingVertical: 10, marginTop: 6,
+  },
+  startBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });
 
 const analysisStyles = StyleSheet.create({

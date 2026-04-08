@@ -114,6 +114,19 @@ export async function getLastExercise(
   }
 }
 
+export async function deleteSession(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await sessionService.deleteSession(req.params.id, req.user.id);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getProgress(
   req: Request,
   res: Response,

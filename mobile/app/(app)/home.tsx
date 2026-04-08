@@ -18,6 +18,16 @@ import { api } from '@/lib/api';
 import { DatePickerModal } from '@/components/ui/DatePickerModal';
 import type { WorkoutSession } from '@/types';
 
+const REST_TIPS = [
+  'Focus on sleep and hydration today.',
+  'Foam roll or do 10 minutes of light stretching.',
+  'Eat enough protein to support muscle recovery.',
+  'A short walk boosts blood flow without adding stress.',
+  'Mental rest matters as much as physical rest.',
+  'Review last week and set clear intentions for tomorrow.',
+  'Mobility work today pays dividends next session.',
+];
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
@@ -151,6 +161,7 @@ export default function HomeScreen() {
                 <Ionicons name="checkmark-circle" size={28} color={theme.colors.success} />
                 <Text style={styles.restDayTitle}>Rest Day</Text>
                 <Text style={styles.restDaySubtitle}>No training scheduled today. Recover well.</Text>
+                <Text style={styles.restDayTip}>{REST_TIPS[new Date().getDay() % REST_TIPS.length]}</Text>
                 <TouchableOpacity
                   style={styles.customWorkoutBtn}
                   onPress={() => router.push('/(app)/workouts/new')}
@@ -261,6 +272,7 @@ const styles = StyleSheet.create({
   restDayCard: { backgroundColor: theme.colors.surface, borderRadius: 16, padding: 24, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: theme.colors.border },
   restDayTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   restDaySubtitle: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center' },
+  restDayTip: { fontSize: 13, color: theme.colors.textSecondary, fontStyle: 'italic', textAlign: 'center', marginTop: 4, paddingHorizontal: 8 },
   customWorkoutBtn: { marginTop: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.primary },
   customWorkoutBtnText: { fontSize: 13, color: theme.colors.primary, fontWeight: '600' },
   // Adherence

@@ -6,6 +6,8 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Link } from 'expo-router';
 import Toast from 'react-native-toast-message';
@@ -92,6 +94,19 @@ export default function LoginScreen() {
           </Button>
         </View>
 
+        <TouchableOpacity
+          style={styles.forgotRow}
+          onPress={() =>
+            Alert.alert(
+              'Forgot Password',
+              'Sign in with your email and update your password from Profile → Change Password.\n\nIf you cannot sign in, contact support.',
+              [{ text: 'OK' }]
+            )
+          }
+        >
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
+
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/(auth)/signup" style={styles.link}>
@@ -144,6 +159,8 @@ const styles = StyleSheet.create({
   submitBtn: {
     marginTop: spacing.sm,
   },
+  forgotRow: { alignItems: 'center', marginTop: -4 },
+  forgotText: { color: colors.accent, fontSize: typography.sm, fontWeight: '500' },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

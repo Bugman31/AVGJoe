@@ -218,6 +218,16 @@ export async function completeSession(sessionId: string, userId: string, data: C
  * Returns the sets logged for a given exercise name in the most recent
  * completed session that included that exercise (excluding the current session).
  */
+export async function deleteSession(id: string, userId: string): Promise<void> {
+  const session = await prisma.workoutSession.findFirst({ where: { id, userId } });
+  if (!session) {
+    const err = new Error('Session not found') as Error & { statusCode: number };
+    err.statusCode = 404;
+    throw err;
+  }
+  await prisma.workoutSession.delete({ where: { id } });
+}
+
 export async function getLastExerciseData(
   userId: string,
   exerciseName: string,
