@@ -31,8 +31,8 @@ export default function ProgramDetailScreen() {
     async function fetchProgram() {
       try {
         setIsLoading(true);
-        const data = await api.get<SharedProgram>(`/api/shared-programs/${id}`);
-        setProgram(data);
+        const data = await api.get<{ program: SharedProgram }>(`/api/shared-programs/${id}`);
+        setProgram(data.program);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load program');
       } finally {
