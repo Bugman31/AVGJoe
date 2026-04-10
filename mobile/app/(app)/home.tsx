@@ -127,10 +127,10 @@ export default function HomeScreen() {
   const repeatLastWorkout = async () => {
     if (!lastSession) return;
     try {
-      const res = await api.post<{ session: WorkoutSession }>('/api/sessions', {
-        name: lastSession.name,
-        templateId: lastSession.templateId ?? undefined,
-      });
+      // Only pass templateId if it exists — program-based sessions have no template
+      const body: Record<string, unknown> = { name: lastSession.name };
+      if (lastSession.templateId) body.templateId = lastSession.templateId;
+      const res = await api.post<{ session: WorkoutSession }>('/api/sessions', body);
       router.push(`/(app)/workouts/active/${res.session.id}`);
     } catch (e) {
       console.error(e);
