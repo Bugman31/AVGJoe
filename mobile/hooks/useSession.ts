@@ -1,14 +1,6 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
-import type { WorkoutSession, LogSetInput } from '@/types';
-
-interface StartSessionPayload {
-  name: string;
-  templateId?: string;
-  plannedWorkoutId?: string;
-  programId?: string;
-  preEnergyLevel?: number;
-}
+import type { WorkoutSession, LogSetInput, PlannedWorkout } from '@/types';
 
 interface CompleteSessionPayload {
   notes?: string;
@@ -21,6 +13,7 @@ interface UseSessionResult {
   isLoading: boolean;
   error: string | null;
   startSession: (templateId: string, name: string) => Promise<WorkoutSession>;
+  startProgramWorkout: (plannedWorkout: PlannedWorkout, programId: string) => Promise<WorkoutSession>;
   logSet: (sessionId: string, payload: LogSetInput) => Promise<void>;
   completeSession: (sessionId: string, notesOrPayload?: string | CompleteSessionPayload) => Promise<WorkoutSession>;
 }
@@ -39,6 +32,30 @@ export function useSession(): UseSessionResult {
       return response.session;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start session';
+      setError(msg);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Start a session tied to a specific PlannedWorkout from an enrolled program
+  const startProgramWorkout = useCallback(async (
+    plannedWorkout: PlannedWorkout,
+    programId: string,
+  ): Promise<WorkoutSession> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.post<{ session: WorkoutSession }>('/api/sessions/start', {
+        name: plannedWorkout.name,
+        plannedWorkoutId: plannedWorkout.id,
+        programId,
+      });
+      setSession(response.session);
+      return response.session;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to start workout';
       setError(msg);
       throw err;
     } finally {
@@ -82,5 +99,5 @@ export function useSession(): UseSessionResult {
     }
   }, []);
 
-  return { session, isLoading, error, startSession, logSet, completeSession };
+  return { session, isLoading, error, startSession, startProgramWorkout, logSet, completeSession };
 }

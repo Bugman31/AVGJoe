@@ -15,6 +15,7 @@ const loginSchema = z.object({
 
 const updateProfileSchema = z.object({
   name: z.string().min(1).max(100).optional(),
+  avatarUrl: z.string().url().optional(),
   anthropicApiKey: z.string().min(1).optional(),
   openaiApiKey: z.string().min(1).optional(),
   aiProvider: z.enum(['anthropic', 'openai']).optional(),

@@ -12,6 +12,8 @@ router.get('/', sessionController.listSessions);
 
 // IMPORTANT: named sub-routes must come before /:id to avoid route conflicts
 router.get('/progress/:exerciseId', sessionController.getProgress);
+router.get('/progress-by-name/:exerciseName', sessionController.getProgressByName);
+router.get('/logged-exercises', sessionController.getLoggedExerciseNames);
 router.get('/last-exercise/:exerciseName', sessionController.getLastExercise);
 
 router.get('/:id', sessionController.getSession);

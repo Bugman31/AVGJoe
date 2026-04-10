@@ -142,3 +142,32 @@ export async function getProgress(
     next(err);
   }
 }
+
+export async function getProgressByName(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const exerciseName = decodeURIComponent(req.params.exerciseName);
+    const rawWeeks = parseInt(String(req.query.weeks ?? '12'), 10);
+    const weeks = isNaN(rawWeeks) ? 12 : Math.max(1, Math.min(rawWeeks, 52));
+    const progress = await sessionService.getProgressByName(exerciseName, req.user.id, weeks);
+    res.json({ progress, exerciseName, weeks });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getLoggedExerciseNames(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const names = await sessionService.getLoggedExerciseNames(req.user.id);
+    res.json({ exercises: names });
+  } catch (err) {
+    next(err);
+  }
+}

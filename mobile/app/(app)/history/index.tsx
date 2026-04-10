@@ -17,7 +17,7 @@ import { SessionCard } from '@/components/history/SessionCard';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
 import { WorkoutSession } from '@/types';
-import { colors, spacing, typography } from '@/lib/theme';
+import { colors, spacing, typography, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
   },
-  list: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  list: { padding: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
   sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sessionCardWrap: { flex: 1 },
   deleteBtn: { padding: 8 },

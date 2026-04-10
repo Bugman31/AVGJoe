@@ -12,19 +12,23 @@ model User {
   email            String   @unique
   passwordHash     String
   name             String?
+  avatarUrl        String?
   anthropicApiKey  String?
   openaiApiKey     String?
   aiProvider       String   @default("anthropic")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  workoutTemplates WorkoutTemplate[]
-  sessions         WorkoutSession[]
-  profile          UserProfile?
-  programs         Program[]
-  plannedWorkouts  PlannedWorkout[]
-  weeklyAnalyses   WeeklyAnalysis[]
-  bodyLogs         BodyLog[]
+  workoutTemplates  WorkoutTemplate[]
+  sessions          WorkoutSession[]
+  profile           UserProfile?
+  programs          Program[]
+  plannedWorkouts   PlannedWorkout[]
+  weeklyAnalyses    WeeklyAnalysis[]
+  bodyLogs          BodyLog[]
+  sharedPrograms    SharedProgram[]
+  enrollments       ProgramEnrollment[]
+  programRatings    ProgramRating[]
 }
 
 model BodyLog {
@@ -235,4 +239,62 @@ model SessionSet {
 
   @@index([sessionId])
   @@index([exerciseId, completedAt])
+}
+
+model SharedProgram {
+  id              String   @id @default(cuid())
+  creatorId       String
+  creatorName     String
+  creatorAvatar   String?
+  name            String
+  description     String?
+  category        String   @default("general")
+  difficulty      String   @default("intermediate")
+  durationWeeks   Int      @default(4)
+  daysPerWeek     Int      @default(3)
+  equipment       String   @default("[]")   // JSON array
+  tags            String   @default("[]")   // JSON array
+  workoutPlan     String   @default("{}")   // JSON object
+  ratingAverage   Float    @default(0)
+  enrollmentCount Int      @default(0)
+  isPublished     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  creator      User                @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  enrollments  ProgramEnrollment[]
+  ratings      ProgramRating[]
+
+  @@index([creatorId])
+  @@index([category, isPublished])
+  @@index([isPublished, createdAt])
+}
+
+model ProgramEnrollment {
+  id              String   @id @default(cuid())
+  userId          String
+  sharedProgramId String
+  programId       String   // the forked Program id
+  enrolledAt      DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedProgram SharedProgram @relation(fields: [sharedProgramId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sharedProgramId])
+  @@index([userId])
+}
+
+model ProgramRating {
+  id              String   @id @default(cuid())
+  userId          String
+  sharedProgramId String
+  rating          Int
+  review          String?
+  createdAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedProgram SharedProgram @relation(fields: [sharedProgramId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sharedProgramId])
+  @@index([sharedProgramId])
 }

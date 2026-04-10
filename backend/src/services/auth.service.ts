@@ -8,6 +8,7 @@ export type AiProvider = 'anthropic' | 'openai';
 
 interface UpdateProfileData {
   name?: string;
+  avatarUrl?: string;
   anthropicApiKey?: string;
   openaiApiKey?: string;
   aiProvider?: AiProvider;
@@ -117,6 +118,7 @@ export async function updateProfile(
   const updateData: Record<string, unknown> = {};
 
   if (data.name !== undefined) updateData.name = data.name;
+  if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl;
   if (data.anthropicApiKey !== undefined) updateData.anthropicApiKey = encrypt(data.anthropicApiKey);
   if (data.openaiApiKey !== undefined) updateData.openaiApiKey = encrypt(data.openaiApiKey);
   if (data.aiProvider !== undefined) updateData.aiProvider = data.aiProvider;

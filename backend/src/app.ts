@@ -13,6 +13,7 @@ import exerciseRoutes from './routes/exercise.routes';
 import programRoutes from './routes/program.routes';
 import analysisRoutes from './routes/analysis.routes';
 import bodyRoutes from './routes/body.routes';
+import sharedProgramRoutes from './routes/sharedProgram.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
@@ -56,6 +57,7 @@ app.use('/api/exercises', exerciseRoutes);
 app.use('/api/programs', programRoutes);
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/body', bodyRoutes);
+app.use('/api/shared-programs', sharedProgramRoutes);
 
 // 404 handler
 app.use((_req, res) => {

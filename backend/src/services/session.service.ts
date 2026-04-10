@@ -253,6 +253,60 @@ export async function getLastExerciseData(
   return session?.sets ?? [];
 }
 
+export async function getProgressByName(
+  exerciseName: string,
+  userId: string,
+  weeks: number
+): Promise<ProgressPoint[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - weeks * 7);
+
+  const sets = await prisma.sessionSet.findMany({
+    where: {
+      exerciseName: { equals: exerciseName, mode: 'insensitive' },
+      completedAt: { gte: since },
+      session: { userId },
+      actualWeight: { not: null },
+    },
+    orderBy: { completedAt: 'asc' },
+    select: { actualWeight: true, actualReps: true, completedAt: true },
+  });
+
+  const byDate = new Map<string, { maxWeight: number; totalVolume: number; reps: number }>();
+  for (const set of sets) {
+    const date = set.completedAt.toISOString().slice(0, 10);
+    const weight = set.actualWeight ?? 0;
+    const reps = set.actualReps ?? 0;
+    const existing = byDate.get(date);
+    if (existing) {
+      existing.maxWeight = Math.max(existing.maxWeight, weight);
+      existing.totalVolume += weight * reps;
+      existing.reps = Math.max(existing.reps, reps);
+    } else {
+      byDate.set(date, { maxWeight: weight, totalVolume: weight * reps, reps });
+    }
+  }
+
+  let allTimePR = 0;
+  const result: ProgressPoint[] = [];
+  for (const [date, stats] of byDate) {
+    const isPR = stats.maxWeight > allTimePR;
+    if (isPR) allTimePR = stats.maxWeight;
+    result.push({ date, maxWeight: stats.maxWeight, totalVolume: stats.totalVolume, reps: stats.reps, isPR });
+  }
+  return result;
+}
+
+export async function getLoggedExerciseNames(userId: string): Promise<string[]> {
+  const sets = await prisma.sessionSet.findMany({
+    where: { session: { userId }, actualWeight: { not: null } },
+    select: { exerciseName: true },
+    distinct: ['exerciseName'],
+    orderBy: { exerciseName: 'asc' },
+  });
+  return sets.map((s) => s.exerciseName);
+}
+
 export async function getProgress(
   exerciseId: string,
   userId: string,

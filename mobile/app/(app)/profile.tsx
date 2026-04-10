@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Linking, Image } from 'react-native';
 import {
   View,
   Text,
@@ -9,6 +10,7 @@ import {
   Alert,
   Switch,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SOUND_PREF_KEY } from '@/hooks/useSetCompleteSound';
@@ -21,8 +23,8 @@ import { Badge } from '@/components/ui/Badge';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme, type ThemeMode } from '@/context/ThemeContext';
-import { colors, spacing, typography } from '@/lib/theme';
-import { useRouter } from 'expo-router';
+import { colors, spacing, typography, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { isHealthKitAvailable, requestPermissions } from '@/lib/healthkit';
 
@@ -34,6 +36,7 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const [name, setName] = useState(user?.name ?? '');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [aiProvider, setAiProvider] = useState<AiProvider>(user?.aiProvider ?? 'anthropic');
@@ -49,6 +52,12 @@ export default function ProfileScreen() {
       setSoundEnabled(val !== 'false');
     });
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser().catch(() => {});
+    }, [refreshUser])
+  );
 
   function toggleSound(val: boolean) {
     setSoundEnabled(val);
@@ -72,6 +81,65 @@ export default function ProfileScreen() {
         'Permission Denied',
         "Open Settings → Privacy & Security → Health → Average Joe's and enable read/write access."
       );
+    }
+  }
+
+  async function handleAvatarPress() {
+    Alert.alert('Profile Photo', 'Update your profile picture', [
+      { text: 'Choose from Library', onPress: pickAvatarFromLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function pickAvatarFromLibrary() {
+    setIsUploadingAvatar(true);
+    try {
+      // Dynamic import — works with or without expo-image-picker installed
+      let ImagePicker: typeof import('expo-image-picker');
+      try {
+        ImagePicker = await import('expo-image-picker');
+      } catch {
+        Alert.alert('Not available', 'expo-image-picker is not installed in this build.');
+        return;
+      }
+
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert('Permission required', 'Please allow access to your photo library in Settings.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images',
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'Could not read image data.');
+        return;
+      }
+
+      const ext = (asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const avatarUrl = `data:${mimeType};base64,${asset.base64}`;
+
+      await api.put('/api/auth/me', { avatarUrl });
+      await refreshUser();
+      Toast.show({ type: 'success', text1: 'Profile photo updated' });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: 'Upload failed',
+        text2: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsUploadingAvatar(false);
     }
   }
 
@@ -130,11 +198,32 @@ export default function ProfileScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* User info summary */}
           <Card style={styles.userCard}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {(user?.name ?? user?.email ?? '?')[0].toUpperCase()}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={handleAvatarPress}
+              disabled={isUploadingAvatar}
+              activeOpacity={0.8}
+            >
+              {(user as any)?.avatarUrl ? (
+                <Image
+                  source={{ uri: (user as any).avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {(user?.name ?? user?.email ?? '?')[0].toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.avatarEditBadge}>
+                {isUploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="camera" size={12} color="#fff" />
+                )}
+              </View>
+            </TouchableOpacity>
             <Text style={styles.userName}>{user?.name ?? 'Unnamed User'}</Text>
             <Text style={styles.userEmail}>{user?.email}</Text>
             <View style={styles.badges}>
@@ -297,27 +386,45 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
             {aiProvider === 'anthropic' ? (
-              <Input
-                label="Anthropic API Key"
-                value={anthropicKey}
-                onChangeText={setAnthropicKey}
-                placeholder={user?.hasAnthropicKey ? '••••••• (saved)' : 'sk-ant-...'}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                testID="api-key-input"
-              />
+              <>
+                <Input
+                  label="Anthropic API Key"
+                  value={anthropicKey}
+                  onChangeText={setAnthropicKey}
+                  placeholder={user?.hasAnthropicKey ? '••••••• (saved)' : 'sk-ant-...'}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  testID="api-key-input"
+                />
+                <TouchableOpacity
+                  style={styles.getKeyLink}
+                  onPress={() => Linking.openURL('https://console.anthropic.com/settings/keys')}
+                >
+                  <Ionicons name="open-outline" size={13} color={colors.accent} />
+                  <Text style={styles.getKeyText}>Get your Anthropic API key →</Text>
+                </TouchableOpacity>
+              </>
             ) : (
-              <Input
-                label="OpenAI API Key"
-                value={openaiKey}
-                onChangeText={setOpenaiKey}
-                placeholder={user?.hasOpenAiKey ? '••••••• (saved)' : 'sk-...'}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                testID="openai-key-input"
-              />
+              <>
+                <Input
+                  label="OpenAI API Key"
+                  value={openaiKey}
+                  onChangeText={setOpenaiKey}
+                  placeholder={user?.hasOpenAiKey ? '••••••• (saved)' : 'sk-...'}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  testID="openai-key-input"
+                />
+                <TouchableOpacity
+                  style={styles.getKeyLink}
+                  onPress={() => Linking.openURL('https://platform.openai.com/api-keys')}
+                >
+                  <Ionicons name="open-outline" size={13} color={colors.accent} />
+                  <Text style={styles.getKeyText}>Get your OpenAI API key →</Text>
+                </TouchableOpacity>
+              </>
             )}
             <Text style={styles.hint}>Your key is stored encrypted and never shared.</Text>
           </Card>
@@ -351,18 +458,34 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   title: { fontSize: typography.xxl, fontWeight: '700', color: colors.text },
-  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
   userCard: { alignItems: 'center', gap: spacing.sm },
+  avatarWrapper: { position: 'relative', width: 64, height: 64 },
+  avatarImage: { width: 64, height: 64, borderRadius: 32 },
   avatar: {
     width: 64, height: 64, borderRadius: 32,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: typography.xxl, fontWeight: '700', color: '#fff' },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: colors.accentHover,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.surface,
+  },
   userName: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   userEmail: { fontSize: typography.sm, color: colors.textSecondary },
   badges: { flexDirection: 'row', gap: spacing.sm },
   sectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
   hint: { fontSize: typography.xs, color: colors.textMuted, marginTop: spacing.xs },
+  getKeyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.xs,
+  },
+  getKeyText: { fontSize: typography.xs, color: colors.accent, fontWeight: '600' },
   providerToggle: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
   providerBtn: {
     flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1,

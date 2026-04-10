@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { WorkoutCard } from '@/components/workouts/WorkoutCard';
 import { Spinner } from '@/components/ui/Spinner';
 import { useWorkouts } from '@/hooks/useWorkouts';
-import { colors, spacing, typography } from '@/lib/theme';
+import { colors, spacing, typography, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 
 export default function WorkoutsScreen() {
   const router = useRouter();
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   title: { fontSize: typography.xxl, fontWeight: '700', color: colors.text },
-  list: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  list: { padding: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
   empty: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxl * 2 },
   emptyTitle: { fontSize: typography.xl, fontWeight: '600', color: colors.textSecondary },
   emptyText: { fontSize: typography.sm, color: colors.textMuted, textAlign: 'center' },

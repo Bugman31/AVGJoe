@@ -17,7 +17,7 @@ import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
-import { colors, spacing, typography, radii } from '@/lib/theme';
+import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 
 interface BodyLog {
   id: string;
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   statUnit: { fontSize: typography.sm, fontWeight: '400', color: colors.textSecondary },
   statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, paddingTop: spacing.sm },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET, paddingTop: spacing.sm },
   logCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.md,

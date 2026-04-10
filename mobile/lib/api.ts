@@ -29,9 +29,21 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  options?: { params?: Record<string, string | undefined> },
 ): Promise<T> {
   const headers = await buildHeaders();
-  const response = await fetch(`${API_BASE}${path}`, {
+
+  // Build query string from params, filtering out undefined/empty values
+  let url = `${API_BASE}${path}`;
+  if (options?.params) {
+    const qs = Object.entries(options.params)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v as string)}`)
+      .join('&');
+    if (qs) url = `${url}?${qs}`;
+  }
+
+  const response = await fetch(url, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -63,7 +75,8 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
+  get: <T>(path: string, options?: { params?: Record<string, string | undefined> }) =>
+    request<T>('GET', path, undefined, options),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),

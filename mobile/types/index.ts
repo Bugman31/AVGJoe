@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  avatarUrl?: string | null;
   hasAnthropicKey?: boolean;
   hasOpenAiKey?: boolean;
   aiProvider?: 'anthropic' | 'openai';
@@ -302,4 +303,43 @@ export interface GenerateAiInput {
   fitnessLevel?: string;
   daysPerWeek?: number;
   equipment?: string;
+}
+
+// ─── Program Marketplace ───────────────────────────────────────────────────
+
+export interface SharedProgram {
+  id: string;
+  creatorId: string;
+  creatorName: string;
+  creatorAvatar: string | null;
+  name: string;
+  description: string | null;
+  category: string;
+  difficulty: string;
+  durationWeeks: number;
+  daysPerWeek: number;
+  equipment: string[];
+  tags: string[];
+  workoutPlan: Record<string, unknown>;
+  ratingAverage: number;
+  enrollmentCount: number;
+  isPublished: boolean;
+  createdAt: string;
+}
+
+export interface ProgramEnrollment {
+  id: string;
+  userId: string;
+  sharedProgramId: string;
+  programId: string;
+  enrolledAt: string;
+}
+
+export interface ProgramRating {
+  id: string;
+  userId: string;
+  sharedProgramId: string;
+  rating: number;
+  review: string | null;
+  createdAt: string;
 }

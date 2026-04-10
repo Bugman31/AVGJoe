@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,26 +11,51 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '@/lib/theme';
+import { useFocusEffect } from 'expo-router';
+import { theme, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProgram } from '@/hooks/useProgram';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
+import { useSession } from '@/hooks/useSession';
 import { useRouter } from 'expo-router';
 import type { PlannedWorkout, WeeklyAnalysis } from '@/types';
 
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function ProgramScreen() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+
+  // Refresh user on every visit so hasAnthropicKey/hasOpenAiKey is always current
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser().catch(() => {});
+    }, [refreshUser])
+  );
   const router = useRouter();
   const { generateProgram, isGenerating, error } = useProgram();
   const { program, isLoading, reload, currentWeekWorkouts } = useActiveProgram();
+  const { startProgramWorkout } = useSession();
   const [analyses, setAnalyses] = useState<WeeklyAnalysis[]>([]);
   const [analyzingWeek, setAnalyzingWeek] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [startingWorkoutId, setStartingWorkoutId] = useState<string | null>(null);
 
-  const hasAiProvider = !!(user?.hasAnthropicKey || user?.hasOpenAiKey);
+  const handleStartWorkout = async (plannedWorkout: PlannedWorkout) => {
+    if (!program) return;
+    setStartingWorkoutId(plannedWorkout.id);
+    try {
+      const session = await startProgramWorkout(plannedWorkout, program.id);
+      router.push(`/(app)/workouts/active/${session.id}`);
+    } catch (e) {
+      Alert.alert('Error', (e as Error).message);
+    } finally {
+      setStartingWorkoutId(null);
+    }
+  };
+
+  // Treat as having AI if cached user says so OR if we don't know yet (let backend decide)
+  const hasAiProvider = true;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -53,17 +78,6 @@ export default function ProgramScreen() {
   };
 
   const handleGenerate = async () => {
-    if (!hasAiProvider) {
-      Alert.alert(
-        'AI Provider Required',
-        'Connect an AI provider to generate programs. Add your Anthropic (Claude) or OpenAI (ChatGPT) API key in Profile → AI Provider.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Profile', onPress: () => router.push('/(app)/profile') },
-        ]
-      );
-      return;
-    }
     Alert.alert(
       'Generate New Program',
       'This will archive your current program and create a new one based on your profile. Continue?',
@@ -121,41 +135,46 @@ export default function ProgramScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.screenTitle}>My Program</Text>
-          <TouchableOpacity
-            style={[styles.generateBtn, !hasAiProvider && styles.generateBtnDisabled]}
-            onPress={handleGenerate}
-            disabled={isGenerating}
-          >
-            {isGenerating
-              ? <ActivityIndicator size="small" color={theme.colors.primary} />
-              : <><Ionicons name="sparkles" size={16} color={hasAiProvider ? theme.colors.primary : theme.colors.textMuted} />
-                <Text style={[styles.generateBtnText, !hasAiProvider && styles.generateBtnTextDisabled]}>New Program</Text></>
-            }
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.browseBtn}
+              onPress={() => router.push('/(app)/programs/browse')}
+            >
+              <Ionicons name="earth-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.browseBtnText}>Browse</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.generateBtn, !hasAiProvider && styles.generateBtnDisabled]}
+              onPress={handleGenerate}
+              disabled={isGenerating}
+            >
+              {isGenerating
+                ? <ActivityIndicator size="small" color={theme.colors.primary} />
+                : <><Ionicons name="sparkles" size={16} color={hasAiProvider ? theme.colors.primary : theme.colors.textMuted} />
+                  <Text style={[styles.generateBtnText, !hasAiProvider && styles.generateBtnTextDisabled]}>Generate</Text></>
+              }
+            </TouchableOpacity>
+          </View>
         </View>
 
         {!program ? (
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
             <Text style={styles.emptyTitle}>No active program</Text>
-            {hasAiProvider ? (
-              <>
-                <Text style={styles.emptySubtitle}>Generate a personalized program based on your profile to get started.</Text>
-                <TouchableOpacity style={styles.emptyBtn} onPress={handleGenerate} disabled={isGenerating}>
-                  {isGenerating
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.emptyBtnText}>Generate My Program</Text>
-                  }
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.emptySubtitle}>Connect an AI provider to generate a personalized program.</Text>
-                <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/(app)/profile')}>
-                  <Text style={styles.emptyBtnText}>Connect AI Provider</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <Text style={styles.emptySubtitle}>Generate a personalized AI program or pick one from the community.</Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={handleGenerate} disabled={isGenerating}>
+              {isGenerating
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.emptyBtnText}>Generate My Program</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.emptyBrowseBtn}
+              onPress={() => router.push('/(app)/programs/browse')}
+            >
+              <Ionicons name="earth-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.emptyBrowseBtnText}>Browse Community Programs</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
@@ -181,12 +200,14 @@ export default function ProgramScreen() {
             {(() => {
               const nextWorkout = weekWorkouts.find((w) => !w.isCompleted);
               if (!nextWorkout) return null;
+              const starting = startingWorkoutId === nextWorkout.id;
               return (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Up Next</Text>
                   <TouchableOpacity
                     style={nextStyles.card}
-                    onPress={() => router.push('/(app)/workouts')}
+                    onPress={() => handleStartWorkout(nextWorkout)}
+                    disabled={!!startingWorkoutId}
                     activeOpacity={0.85}
                   >
                     <View style={nextStyles.cardTop}>
@@ -200,9 +221,12 @@ export default function ProgramScreen() {
                     </View>
                     <Text style={nextStyles.name}>{nextWorkout.name}</Text>
                     {nextWorkout.focus && <Text style={nextStyles.focus}>{nextWorkout.focus}</Text>}
+                    <Text style={nextStyles.exerciseCount}>{nextWorkout.exercises.length} exercises</Text>
                     <View style={nextStyles.startBtn}>
-                      <Ionicons name="play" size={14} color="#fff" />
-                      <Text style={nextStyles.startBtnText}>Start Now</Text>
+                      {starting
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <><Ionicons name="play" size={14} color="#fff" /><Text style={nextStyles.startBtnText}>Start Now</Text></>
+                      }
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -217,7 +241,14 @@ export default function ProgramScreen() {
                 : DAY_ORDER.filter((d) => weekWorkouts.some((w) => w.dayOfWeek === d)).map((day) => {
                     const pw = weekWorkouts.find((w) => w.dayOfWeek === day);
                     if (!pw) return null;
-                    return <PlannedWorkoutCard key={pw.id} workout={pw} />;
+                    return (
+                      <PlannedWorkoutCard
+                        key={pw.id}
+                        workout={pw}
+                        onStart={pw.isCompleted ? undefined : () => handleStartWorkout(pw)}
+                        isStarting={startingWorkoutId === pw.id}
+                      />
+                    );
                   })
               }
             </View>
@@ -261,7 +292,15 @@ export default function ProgramScreen() {
   );
 }
 
-function PlannedWorkoutCard({ workout }: { workout: PlannedWorkout }) {
+function PlannedWorkoutCard({
+  workout,
+  onStart,
+  isStarting,
+}: {
+  workout: PlannedWorkout;
+  onStart?: () => void;
+  isStarting?: boolean;
+}) {
   return (
     <View style={[cardStyles.card, workout.isCompleted && cardStyles.cardDone]}>
       <View style={cardStyles.cardLeft}>
@@ -282,6 +321,14 @@ function PlannedWorkoutCard({ workout }: { workout: PlannedWorkout }) {
           {workout.exercises.length} exercises{workout.estimatedDuration ? ` · ${workout.estimatedDuration} min` : ''}
         </Text>
       </View>
+      {onStart && (
+        <TouchableOpacity style={cardStyles.startBtn} onPress={onStart} disabled={isStarting}>
+          {isStarting
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Ionicons name="play" size={16} color="#fff" />
+          }
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -320,9 +367,12 @@ function AnalysisCard({ analysis }: { analysis: WeeklyAnalysis }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingBottom: 40, gap: 24 },
+  content: { padding: 20, paddingBottom: TAB_BAR_BOTTOM_INSET, gap: 24 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   screenTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
+  browseBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
+  browseBtnText: { fontSize: 13, color: theme.colors.primary, fontWeight: '600' },
   generateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.primary },
   generateBtnDisabled: { borderColor: theme.colors.border },
   generateBtnText: { fontSize: 13, color: theme.colors.primary, fontWeight: '600' },
@@ -333,6 +383,8 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   emptyBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: theme.colors.primary, borderRadius: 12 },
   emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  emptyBrowseBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.primary },
+  emptyBrowseBtnText: { color: theme.colors.primary, fontWeight: '600', fontSize: 15 },
   // Program card
   programCard: { backgroundColor: theme.colors.surface, borderRadius: 16, padding: 16, gap: 10, borderWidth: 1, borderColor: theme.colors.border },
   programCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -364,6 +416,12 @@ const cardStyles = StyleSheet.create({
   workoutName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   focus: { fontSize: 12, color: theme.colors.primary },
   meta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+  startBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center',
+  },
 });
 
 const nextStyles = StyleSheet.create({
@@ -377,6 +435,7 @@ const nextStyles = StyleSheet.create({
   durText: { fontSize: 11, color: theme.colors.textSecondary },
   name: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   focus: { fontSize: 13, color: theme.colors.primary },
+  exerciseCount: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   startBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     backgroundColor: theme.colors.primary, borderRadius: 10, paddingVertical: 10, marginTop: 6,

@@ -15,9 +15,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api } from '@/lib/api';
 import { colors, radii, spacing, typography } from '@/lib/theme';
-import type { LibraryExercise } from '@/types';
+import { exerciseLibrary, type LibraryExercise } from '@/lib/exerciseLibrary';
+import { useCustomExercises } from '@/hooks/useCustomExercises';
 
 export interface PickedExercise {
   name: string;
@@ -48,26 +48,24 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePickerModalProps) {
-  const [library, setLibrary] = useState<LibraryExercise[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState<Category>('all');
   const searchRef = useRef<TextInput>(null);
+  const { customExercises } = useCustomExercises();
 
-  // Fetch library once on first open
+  const allExercises = useMemo(
+    () => [...exerciseLibrary, ...customExercises],
+    [customExercises]
+  );
+
   useEffect(() => {
-    if (visible && library.length === 0) {
-      api.get<{ exercises: LibraryExercise[] }>('/api/exercises')
-        .then((res) => setLibrary(res.exercises))
-        .catch(() => {});
-    }
     if (visible) {
-      // Small delay so the modal animation finishes before focusing
       setTimeout(() => searchRef.current?.focus(), 300);
     }
   }, [visible]);
 
   const filtered = useMemo(() => {
-    let result = library;
+    let result = allExercises;
     if (category !== 'all') result = result.filter((e) => e.category === category);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -78,7 +76,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
       );
     }
     return result;
-  }, [library, category, searchQuery]);
+  }, [allExercises, category, searchQuery]);
 
   function handleSelect(ex: LibraryExercise) {
     onSelect({ name: ex.name, defaultSets: ex.defaultSets, defaultReps: ex.defaultReps, isCustom: false });
@@ -99,7 +97,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
   }
 
   const showCustomOption = searchQuery.trim().length > 0 &&
-    !library.some((e) => e.name.toLowerCase() === searchQuery.trim().toLowerCase());
+    !allExercises.some((e) => e.name.toLowerCase() === searchQuery.trim().toLowerCase());
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { reset(); onClose(); }}>
@@ -188,10 +186,8 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>
-                {library.length === 0 ? 'Loading…' : 'No exercises match your search.'}
-              </Text>
-              {searchQuery.trim() && library.length > 0 && (
+              <Text style={styles.emptyText}>No exercises match your search.</Text>
+              {searchQuery.trim() && (
                 <Text style={styles.emptyHint}>Tap "Add as custom exercise" above to add it.</Text>
               )}
             </View>

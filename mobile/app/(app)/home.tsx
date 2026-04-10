@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '@/lib/theme';
+import { theme, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
 import { api } from '@/lib/api';
@@ -28,15 +29,71 @@ const REST_TIPS = [
   'Mobility work today pays dividends next session.',
 ];
 
+function computeStreak(sessions: WorkoutSession[]): number {
+  const completedDates = new Set(
+    sessions
+      .filter((s) => s.completedAt)
+      .map((s) => new Date(s.completedAt!).toISOString().slice(0, 10))
+  );
+
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    if (completedDates.has(dateStr)) {
+      streak++;
+    } else if (i > 0) {
+      // Allow today to be empty (streak still alive if yesterday had one)
+      break;
+    }
+  }
+  return streak;
+}
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const { program, isLoading, reload, todayWorkout, currentWeekWorkouts, weekAdherence } = useActiveProgram();
   const [refreshing, setRefreshing] = useState(false);
 
+  // Resume / streak / last workout state
+  const [inProgressSession, setInProgressSession] = useState<WorkoutSession | null>(null);
+  const [lastSession, setLastSession] = useState<WorkoutSession | null>(null);
+  const [streak, setStreak] = useState(0);
+
+  async function loadSessionData() {
+    try {
+      const res = await api.get<{ sessions: WorkoutSession[]; total: number }>(
+        '/api/sessions?limit=30'
+      );
+      const sessions = res.sessions ?? [];
+
+      // In-progress = no completedAt
+      const inProgress = sessions.find((s) => !s.completedAt) ?? null;
+      setInProgressSession(inProgress);
+
+      // Last completed
+      const completed = sessions.filter((s) => s.completedAt);
+      setLastSession(completed[0] ?? null);
+
+      // Streak
+      setStreak(computeStreak(sessions));
+    } catch {
+      // silent fail
+    }
+  }
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSessionData();
+    }, [])
+  );
+
   async function onRefresh() {
     setRefreshing(true);
-    await reload();
+    await Promise.all([reload(), loadSessionData()]);
     setRefreshing(false);
   }
 
@@ -67,6 +124,19 @@ export default function HomeScreen() {
     }
   };
 
+  const repeatLastWorkout = async () => {
+    if (!lastSession) return;
+    try {
+      const res = await api.post<{ session: WorkoutSession }>('/api/sessions', {
+        name: lastSession.name,
+        templateId: lastSession.templateId ?? undefined,
+      });
+      router.push(`/(app)/workouts/active/${res.session.id}`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const firstName = user?.name?.split(' ')[0] ?? 'Athlete';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -88,18 +158,45 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
-        {/* Greeting */}
+        {/* Greeting + streak */}
         <View style={styles.greetingRow}>
           <View>
             <Text style={styles.greeting}>{greeting},</Text>
             <Text style={styles.name}>{firstName}</Text>
           </View>
-          {program && (
-            <View style={styles.weekBadge}>
-              <Text style={styles.weekBadgeText}>Week {program.currentWeek}/{program.totalWeeks}</Text>
-            </View>
-          )}
+          <View style={styles.greetingRight}>
+            {streak > 0 && (
+              <View style={styles.streakBadge}>
+                <Text style={styles.streakFire}>🔥</Text>
+                <Text style={styles.streakCount}>{streak}</Text>
+                <Text style={styles.streakLabel}>day streak</Text>
+              </View>
+            )}
+            {program && (
+              <View style={styles.weekBadge}>
+                <Text style={styles.weekBadgeText}>Week {program.currentWeek}/{program.totalWeeks}</Text>
+              </View>
+            )}
+          </View>
         </View>
+
+        {/* Resume in-progress banner */}
+        {inProgressSession && (
+          <TouchableOpacity
+            style={styles.resumeBanner}
+            onPress={() => router.push(`/(app)/workouts/active/${inProgressSession.id}`)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.resumeLeft}>
+              <Ionicons name="play-circle" size={22} color={theme.colors.warning} />
+              <View>
+                <Text style={styles.resumeTitle}>Resume workout</Text>
+                <Text style={styles.resumeName}>{inProgressSession.name}</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.warning} />
+          </TouchableOpacity>
+        )}
 
         {/* No program CTA */}
         {!program && (
@@ -222,6 +319,14 @@ export default function HomeScreen() {
               <Text style={styles.quickActionText}>My Program</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Repeat last workout */}
+          {lastSession && (
+            <TouchableOpacity style={styles.repeatBtn} onPress={repeatLastWorkout} activeOpacity={0.8}>
+              <Ionicons name="refresh-outline" size={18} color={theme.colors.primary} />
+              <Text style={styles.repeatBtnText}>Repeat: {lastSession.name}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
@@ -237,12 +342,31 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingBottom: 40, gap: 24 },
+  content: { padding: 20, paddingBottom: TAB_BAR_BOTTOM_INSET, gap: 24 },
   greetingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   greeting: { fontSize: 15, color: theme.colors.textSecondary },
   name: { fontSize: 26, fontWeight: '700', color: theme.colors.text, marginTop: 2 },
+  greetingRight: { alignItems: 'flex-end', gap: 6 },
   weekBadge: { backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: theme.colors.border },
   weekBadgeText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '500' },
+  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.warning + '20', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: theme.colors.warning + '50' },
+  streakFire: { fontSize: 14 },
+  streakCount: { fontSize: 14, fontWeight: '700', color: theme.colors.warning },
+  streakLabel: { fontSize: 11, color: theme.colors.warning },
+  // Resume banner
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.warning + '18',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.warning + '50',
+  },
+  resumeLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  resumeTitle: { fontSize: 12, color: theme.colors.warning, fontWeight: '600' },
+  resumeName: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginTop: 1 },
   section: { gap: 12 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
@@ -288,4 +412,17 @@ const styles = StyleSheet.create({
   quickActions: { flexDirection: 'row', gap: 10 },
   quickAction: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: 12, paddingVertical: 16, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: theme.colors.border },
   quickActionText: { fontSize: 11, color: theme.colors.textSecondary, fontWeight: '500', textAlign: 'center' },
+  // Repeat last workout
+  repeatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  repeatBtnText: { flex: 1, fontSize: 14, color: theme.colors.primary, fontWeight: '600' },
 });

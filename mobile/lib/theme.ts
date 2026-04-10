@@ -37,6 +37,10 @@ export const spacing = {
   xxl: 32,
 };
 
+// Extra bottom padding needed on scrollable screens so content clears the floating tab bar
+// Tab bar: height 64 + bottom offset 24 + extra breathing room 16 = 104
+export const TAB_BAR_BOTTOM_INSET = 104;
+
 export const radii = {
   sm: 6,
   md: 8,
