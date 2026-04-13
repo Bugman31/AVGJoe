@@ -11,20 +11,22 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.avgjoe.workouttracker",
+      "buildNumber": "1",
       "entitlements": {
         "com.apple.developer.healthkit": true,
         "com.apple.developer.healthkit.access": []
       },
       "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        },
         "NSHealthShareUsageDescription": "Average Joe's reads your Apple Watch workout data to import sessions and activity.",
-        "NSHealthUpdateUsageDescription": "Average Joe's writes your completed workouts to Apple Health to keep your fitness data in sync."
+        "NSHealthUpdateUsageDescription": "Average Joe's writes your completed workouts to Apple Health to keep your fitness data in sync.",
+        "NSMicrophoneUsageDescription": "Average Joe's uses the microphone for audio feedback during workouts.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,12 +34,29 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
-      "package": "com.avgjoe.workouttracker"
+      "package": "com.avgjoe.workouttracker",
+      "versionCode": 1
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Average Joe's uses the microphone for audio feedback during workouts."
+        }
+      ]
     ],
-    "scheme": "avgjoe"
+    "scheme": "avgjoe",
+    "extra": {
+      "eas": {
+        "projectId": "fdcf1288-84f3-4e8d-91b7-51a10884ced8"
+      },
+      "apiUrl": "http://localhost:8000",
+      "router": {
+        "origin": false
+      }
+    },
+    "owner": "bugman31"
   }
 }
