@@ -11,10 +11,7 @@
       }
     },
     "preview": {
-      "distribution": "internal",
-      "ios": {
-        "simulator": false
-      },
+      "distribution": "store",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://avgjoe.onrender.com"
       }
