@@ -299,28 +299,83 @@ interface AiGeneratedProgram {
   workouts: AiPlannedWorkout[];
 }
 
-function buildProgramSystemPrompt(): string {
-  return `You are an expert certified strength and conditioning coach. Create a personalized multi-week training program based on detailed user profile data.
+// ── Step 1 schema: program skeleton (no workouts) ──
 
-Program requirements:
-- Design a structured program matching the user's goals, experience, equipment, and schedule
-- Include appropriate weekly splits (e.g., Upper/Lower, PPL, Full Body)
-- Progressive overload built in week-over-week
-- RPE targets (e.g., "7-8") on main lifts — not absolute weights (user will calibrate)
-- Include warmup movements for each session
-- Add conditioning blocks when relevant to the user's goals
-- Respect all restrictions and injury flags
-- Use only equipment the user has available
-- Each workout should include honest coaching notes about the session's purpose
+interface AiProgramStructure {
+  programName: string;
+  programDescription: string;
+  totalWeeks: number;
+  weeklyStructure: { split: string; days: string[] };
+  progressionRules: { mainLifts: string; accessories: string; conditioning: string };
+  aiGoalSummary: string;
+}
 
-Output ONLY valid JSON matching this exact schema:
+// ── Step 2 schema: one week of workouts ──
+
+interface AiWeekWorkouts {
+  weekNumber: number;
+  workouts: AiPlannedWorkout[];
+}
+
+function buildStructureSystemPrompt(): string {
+  return `You are an expert certified strength and conditioning coach. Design the structure for a personalized multi-week training program.
+
+Output ONLY valid JSON matching this exact schema — no text outside the JSON:
 {
   "programName": "string",
   "programDescription": "string",
   "totalWeeks": 4,
-  "weeklyStructure": { "split": "string", "days": ["Monday", "Wednesday", "Friday"] },
-  "progressionRules": { "mainLifts": "string", "accessories": "string", "conditioning": "string" },
-  "aiGoalSummary": "string — 2-3 sentence coaching profile summary for the user",
+  "weeklyStructure": {
+    "split": "string (e.g. Upper/Lower, Push/Pull/Legs, Full Body)",
+    "days": ["Monday", "Wednesday", "Friday", "Saturday"]
+  },
+  "progressionRules": {
+    "mainLifts": "string (e.g. Add 5 lbs each week on primary movements)",
+    "accessories": "string",
+    "conditioning": "string"
+  },
+  "aiGoalSummary": "string — 2-3 sentence coaching profile summary"
+}
+
+Do not include any workout details. Return ONLY the JSON object. Do not use markdown code blocks.`;
+}
+
+function buildStructureUserPrompt(profile: OnboardingData): string {
+  const lines: string[] = [
+    'Design the training program structure for this athlete:',
+    '',
+    `Primary Goal: ${profile.primaryGoal}`,
+    `Secondary Goals: ${profile.secondaryGoals.join(', ') || 'none'}`,
+    `Experience Level: ${profile.experienceLevel}`,
+    `Training Days Per Week: ${profile.daysPerWeek}`,
+    `Session Duration: ${profile.sessionDurationMins} minutes`,
+    `Preferred Split: ${profile.preferredSplit}`,
+    `Available Equipment: ${profile.availableEquipment.join(', ') || 'bodyweight only'}`,
+    `Movement Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
+    `Injury Flags: ${profile.injuryFlags.join(', ') || 'none'}`,
+    `Workout Environment: ${profile.workoutEnvironment}`,
+    `Priority Areas: ${profile.priorityAreas.join(', ') || 'general'}`,
+    `Program Style: ${profile.programStyle}`,
+    `Unit System: ${profile.unitSystem}`,
+  ];
+
+  if (profile.bodyweight) lines.push(`Bodyweight: ${profile.bodyweight} ${profile.unitSystem}`);
+  if (profile.benchmarkSquat) lines.push(`Squat Best: ${profile.benchmarkSquat} ${profile.unitSystem}`);
+  if (profile.benchmarkDeadlift) lines.push(`Deadlift Best: ${profile.benchmarkDeadlift} ${profile.unitSystem}`);
+  if (profile.benchmarkBench) lines.push(`Bench Press Best: ${profile.benchmarkBench} ${profile.unitSystem}`);
+  if (profile.benchmarkPress) lines.push(`Overhead Press Best: ${profile.benchmarkPress} ${profile.unitSystem}`);
+  if (profile.benchmarkPullups) lines.push(`Pull-Up Max Reps: ${profile.benchmarkPullups}`);
+
+  lines.push('', 'Return ONLY the JSON object — no markdown, no explanation.');
+  return lines.join('\n');
+}
+
+function buildWeekSystemPrompt(): string {
+  return `You are an expert certified strength and conditioning coach. Generate the workouts for a specific week of a training program.
+
+Output ONLY valid JSON matching this exact schema:
+{
+  "weekNumber": 1,
   "workouts": [
     {
       "weekNumber": 1,
@@ -356,45 +411,56 @@ conditioning can be null or: { "description": "string", "duration": "string", "i
 Do not include any text outside the JSON object. Do not use markdown code blocks.`;
 }
 
-function buildProgramUserPrompt(profile: OnboardingData): string {
-  const lines: string[] = [
-    'Create a personalized training program for this athlete:',
+function buildWeekUserPrompt(
+  profile: OnboardingData,
+  structure: AiProgramStructure,
+  weekNumber: number
+): string {
+  const lines = [
+    `Generate workouts for WEEK ${weekNumber} of ${structure.totalWeeks} of the "${structure.programName}" program.`,
     '',
+    'Program structure:',
+    `Split: ${structure.weeklyStructure.split}`,
+    `Training days: ${structure.weeklyStructure.days.join(', ')}`,
+    '',
+    'Progression rules:',
+    `Main lifts: ${structure.progressionRules.mainLifts}`,
+    `Accessories: ${structure.progressionRules.accessories}`,
+    '',
+    'Athlete profile:',
     `Primary Goal: ${profile.primaryGoal}`,
-    `Secondary Goals: ${profile.secondaryGoals.join(', ') || 'none'}`,
     `Experience Level: ${profile.experienceLevel}`,
-    `Training Days Per Week: ${profile.daysPerWeek}`,
     `Session Duration: ${profile.sessionDurationMins} minutes`,
-    `Preferred Split: ${profile.preferredSplit}`,
     `Available Equipment: ${profile.availableEquipment.join(', ') || 'bodyweight only'}`,
-    `Movement Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
-    `Injury Flags: ${profile.injuryFlags.join(', ') || 'none'}`,
-    `Workout Environment: ${profile.workoutEnvironment}`,
-    `Priority Areas: ${profile.priorityAreas.join(', ') || 'general'}`,
-    `Program Style: ${profile.programStyle}`,
     `Unit System: ${profile.unitSystem}`,
+    `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
   ];
 
-  if (profile.bodyweight) lines.push(`Bodyweight: ${profile.bodyweight} ${profile.unitSystem}`);
   if (profile.benchmarkSquat) lines.push(`Squat Best: ${profile.benchmarkSquat} ${profile.unitSystem}`);
   if (profile.benchmarkDeadlift) lines.push(`Deadlift Best: ${profile.benchmarkDeadlift} ${profile.unitSystem}`);
   if (profile.benchmarkBench) lines.push(`Bench Press Best: ${profile.benchmarkBench} ${profile.unitSystem}`);
-  if (profile.benchmarkPress) lines.push(`Overhead Press Best: ${profile.benchmarkPress} ${profile.unitSystem}`);
-  if (profile.benchmarkPullups) lines.push(`Pull-Up Max Reps: ${profile.benchmarkPullups}`);
 
-  lines.push('', 'Return ONLY the JSON object — no markdown, no explanation.');
+  lines.push(
+    '',
+    `This is week ${weekNumber} of ${structure.totalWeeks} — apply progressive overload appropriate for this week's position.`,
+    'Return ONLY the JSON object.'
+  );
   return lines.join('\n');
 }
 
-function validateGeneratedProgram(plan: unknown): plan is AiGeneratedProgram {
-  if (typeof plan !== 'object' || plan === null) return false;
-  const p = plan as Record<string, unknown>;
-  if (typeof p.programName !== 'string') return false;
-  if (!Array.isArray(p.workouts) || p.workouts.length === 0) return false;
-  return true;
+function validateProgramStructure(val: unknown): val is AiProgramStructure {
+  if (typeof val !== 'object' || val === null) return false;
+  const v = val as Record<string, unknown>;
+  return typeof v.programName === 'string' && typeof v.totalWeeks === 'number';
 }
 
-export async function generateProgram(userId: string) {
+function validateWeekWorkouts(val: unknown): val is AiWeekWorkouts {
+  if (typeof val !== 'object' || val === null) return false;
+  const v = val as Record<string, unknown>;
+  return typeof v.weekNumber === 'number' && Array.isArray(v.workouts);
+}
+
+export async function generateProgram(userId: string): Promise<AiGeneratedProgram> {
   const [resolved, profileRow] = await Promise.all([
     resolveAi(userId),
     prisma.userProfile.findUnique({ where: { userId } }),
@@ -430,15 +496,38 @@ export async function generateProgram(userId: string) {
     unitSystem: profileRow.unitSystem,
   };
 
-  const result = await callAiWithRetry<AiGeneratedProgram>(
+  // Call 1: program skeleton — fast, ~2000 tokens
+  const structure = await callAiWithRetry<AiProgramStructure>(
     resolved,
-    buildProgramSystemPrompt(),
-    buildProgramUserPrompt(profile),
-    validateGeneratedProgram,
-    16000
+    buildStructureSystemPrompt(),
+    buildStructureUserPrompt(profile),
+    validateProgramStructure,
+    2000
   );
 
-  return result;
+  // Call 2+: one call per week, all in parallel — each ~3500 tokens
+  const weekNumbers = Array.from({ length: structure.totalWeeks }, (_, i) => i + 1);
+  const weekResults = await Promise.all(
+    weekNumbers.map((weekNum) =>
+      callAiWithRetry<AiWeekWorkouts>(
+        resolved,
+        buildWeekSystemPrompt(),
+        buildWeekUserPrompt(profile, structure, weekNum),
+        validateWeekWorkouts,
+        3500
+      )
+    )
+  );
+
+  return {
+    programName: structure.programName,
+    programDescription: structure.programDescription,
+    totalWeeks: structure.totalWeeks,
+    weeklyStructure: structure.weeklyStructure,
+    progressionRules: structure.progressionRules,
+    aiGoalSummary: structure.aiGoalSummary,
+    workouts: weekResults.flatMap((w) => w.workouts),
+  };
 }
 
 // ─────────────────────────────────────────────
