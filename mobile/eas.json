@@ -12,6 +12,7 @@
     },
     "preview": {
       "distribution": "store",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://avgjoe.onrender.com"
       }
