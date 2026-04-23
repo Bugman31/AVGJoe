@@ -8,6 +8,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY prisma ./prisma
+# Schema uses sqlite for local dev; swap to postgresql for production build
+RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 RUN npx prisma generate
 
 COPY tsconfig.json ./

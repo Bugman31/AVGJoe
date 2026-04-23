@@ -239,12 +239,12 @@ export async function getLastExerciseData(
       userId,
       completedAt: { not: null },
       ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
-      sets: { some: { exerciseName: { equals: exerciseName, mode: 'insensitive' } } },
+      sets: { some: { exerciseName: { equals: exerciseName } } },
     },
     orderBy: { completedAt: 'desc' },
     select: {
       sets: {
-        where: { exerciseName: { equals: exerciseName, mode: 'insensitive' } },
+        where: { exerciseName: { equals: exerciseName } },
         orderBy: { setNumber: 'asc' },
         select: { setNumber: true, actualReps: true, actualWeight: true, unit: true },
       },
@@ -263,7 +263,7 @@ export async function getProgressByName(
 
   const sets = await prisma.sessionSet.findMany({
     where: {
-      exerciseName: { equals: exerciseName, mode: 'insensitive' },
+      exerciseName: { equals: exerciseName },
       completedAt: { gte: since },
       session: { userId },
       actualWeight: { not: null },
