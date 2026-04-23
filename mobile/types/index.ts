@@ -8,6 +8,7 @@ export interface User {
   hasAnthropicKey?: boolean;
   hasOpenAiKey?: boolean;
   serverHasAiKey?: boolean;
+  paidProgramsEnabled?: boolean;
   aiProvider?: 'anthropic' | 'openai';
   onboardingCompleted?: boolean;
   createdAt?: string;
@@ -322,6 +323,8 @@ export interface SharedProgram {
   equipment: string[];
   tags: string[];
   workoutPlan: Record<string, unknown>;
+  price: number;
+  currency: string;
   ratingAverage: number;
   enrollmentCount: number;
   isPublished: boolean;

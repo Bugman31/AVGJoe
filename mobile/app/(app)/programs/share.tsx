@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { Program } from '@/types';
 
@@ -36,6 +37,8 @@ const DIFFICULTY_OPTIONS = [
 
 export default function ShareProgramScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const paidEnabled = !!user?.paidProgramsEnabled;
 
   const [activeProgram, setActiveProgram] = useState<Program | null>(null);
   const [isLoadingProgram, setIsLoadingProgram] = useState(true);
@@ -47,6 +50,7 @@ export default function ShareProgramScreen() {
   const [difficulty, setDifficulty] = useState('intermediate');
   const [durationWeeks, setDurationWeeks] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState('');
+  const [price, setPrice] = useState('');
 
   useEffect(() => {
     async function fetchActive() {
@@ -84,6 +88,8 @@ export default function ShareProgramScreen() {
         workoutPlan: activeProgram.weeklyStructure,
         equipment: [],
         tags: [],
+        price: paidEnabled ? (parseFloat(price) || 0) : 0,
+        currency: 'USD',
       });
       Toast.show({ type: 'success', text1: 'Program published!' });
       router.back();
@@ -219,6 +225,32 @@ export default function ShareProgramScreen() {
           </View>
         </View>
 
+        {/* Price */}
+        <View style={styles.field}>
+          <View style={styles.priceLabelRow}>
+            <Text style={styles.label}>Price (USD)</Text>
+            {!paidEnabled && (
+              <View style={styles.comingSoonChip}>
+                <Text style={styles.comingSoonText}>Coming Soon</Text>
+              </View>
+            )}
+          </View>
+          {paidEnabled ? (
+            <TextInput
+              style={styles.input}
+              value={price}
+              onChangeText={setPrice}
+              placeholder="0.00"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+            />
+          ) : (
+            <View style={[styles.input, styles.inputDisabled]}>
+              <Text style={styles.inputDisabledText}>Free for now</Text>
+            </View>
+          )}
+        </View>
+
         {/* Submit */}
         <TouchableOpacity
           style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
@@ -304,6 +336,18 @@ const styles = StyleSheet.create({
   pillText: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '500' },
   pillTextActive: { color: colors.accent },
   row: { flexDirection: 'row', gap: spacing.md },
+  priceLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  comingSoonChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  comingSoonText: { fontSize: typography.xs, color: colors.textMuted, fontWeight: '600' },
+  inputDisabled: { justifyContent: 'center' },
+  inputDisabledText: { fontSize: typography.md, color: colors.textMuted },
   submitBtn: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,

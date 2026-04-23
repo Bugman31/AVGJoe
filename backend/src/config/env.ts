@@ -9,6 +9,7 @@ const schema = z.object({
   ENCRYPTION_KEY: z.string().optional(),
   PORT: z.string().default('8000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  ENABLE_PAID_PROGRAMS: z.string().default('false'),
 });
 
 const parsed = schema.safeParse(process.env);

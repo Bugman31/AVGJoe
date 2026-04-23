@@ -63,13 +63,21 @@ export default function ProgramBrowseScreen() {
   }
 
   function renderProgramCard({ item }: { item: SharedProgram }) {
+    const isPaid = (item.price ?? 0) > 0;
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() => router.push(`/(app)/programs/${item.id}`)}
         activeOpacity={0.8}
       >
-        <Text style={styles.cardName}>{item.name}</Text>
+        <View style={styles.cardTopRow}>
+          <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+          <View style={[styles.priceBadge, isPaid && styles.priceBadgePaid]}>
+            <Text style={[styles.priceBadgeText, isPaid && styles.priceBadgeTextPaid]}>
+              {isPaid ? `$${item.price.toFixed(2)} · Soon` : 'Free'}
+            </Text>
+          </View>
+        </View>
         <Text style={styles.cardCreator}>{item.creatorName}</Text>
         <Text style={styles.cardMetaText}>{item.durationWeeks}wk · {item.daysPerWeek}d/wk</Text>
       </TouchableOpacity>
@@ -234,7 +242,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  cardName: { fontSize: typography.lg, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  cardName: { fontSize: typography.lg, fontWeight: '700', color: colors.text, flex: 1, marginRight: spacing.sm },
+  priceBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radii.full, backgroundColor: colors.accentLight },
+  priceBadgeText: { fontSize: typography.xs, fontWeight: '700', color: colors.accent },
+  priceBadgePaid: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  priceBadgeTextPaid: { color: colors.textMuted },
   cardCreator: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: 4 },
   cardMetaText: { fontSize: typography.xs, color: colors.textMuted },
   emptyContainer: { alignItems: 'center', paddingTop: spacing.xxl * 2 },

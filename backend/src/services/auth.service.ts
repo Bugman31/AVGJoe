@@ -23,6 +23,7 @@ interface SafeUser {
   hasAnthropicKey: boolean;
   hasOpenAiKey: boolean;
   serverHasAiKey: boolean;
+  paidProgramsEnabled: boolean;
   aiProvider: AiProvider;
 }
 
@@ -51,6 +52,7 @@ function toSafeUser(u: {
     hasAnthropicKey: !!u.anthropicApiKey,
     hasOpenAiKey: !!u.openaiApiKey,
     serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),
+    paidProgramsEnabled: env.ENABLE_PAID_PROGRAMS === 'true',
     aiProvider: (u.aiProvider as AiProvider) ?? 'anthropic',
   };
 }

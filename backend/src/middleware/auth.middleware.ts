@@ -51,6 +51,7 @@ export async function authMiddleware(
         hasAnthropicKey: !!userWithProfile.anthropicApiKey,
         hasOpenAiKey: !!userWithProfile.openaiApiKey,
         serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),
+        paidProgramsEnabled: env.ENABLE_PAID_PROGRAMS === 'true',
         aiProvider: (userWithProfile.aiProvider ?? 'anthropic') as 'anthropic' | 'openai',
       }
     : null;

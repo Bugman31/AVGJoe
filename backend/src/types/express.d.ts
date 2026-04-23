@@ -11,6 +11,7 @@ declare global {
         hasAnthropicKey: boolean;
         hasOpenAiKey: boolean;
         serverHasAiKey: boolean;
+        paidProgramsEnabled: boolean;
         aiProvider: 'anthropic' | 'openai';
       };
     }

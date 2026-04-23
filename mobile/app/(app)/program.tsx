@@ -123,6 +123,7 @@ export default function ProgramScreen() {
 
   const weekWorkouts = currentWeekWorkouts();
   const currentAnalysis = analyses.find((a) => a.weekNumber === program?.currentWeek);
+  const allWorkoutsDone = weekWorkouts.length > 0 && weekWorkouts.every((w) => w.isCompleted);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -282,13 +283,13 @@ export default function ProgramScreen() {
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
-                  style={styles.analyzeBtn}
-                  onPress={handleAnalyzeWeek}
-                  disabled={analyzingWeek}
+                  style={[styles.analyzeBtn, (!allWorkoutsDone || analyzingWeek) && styles.analyzeBtnDisabled]}
+                  onPress={allWorkoutsDone ? handleAnalyzeWeek : undefined}
+                  disabled={!allWorkoutsDone || analyzingWeek}
                 >
                   {analyzingWeek
                     ? <ActivityIndicator size="small" color={theme.colors.primary} />
-                    : <Text style={styles.analyzeBtnText}>Analyze Week</Text>
+                    : <Text style={[styles.analyzeBtnText, !allWorkoutsDone && styles.analyzeBtnTextDisabled]}>Analyze Week</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -362,9 +363,9 @@ function AnalysisCard({ analysis }: { analysis: WeeklyAnalysis }) {
       {analysis.weekSummary && (
         <Text style={analysisStyles.summary}>{analysis.weekSummary}</Text>
       )}
-      {analysis.recommendations.length > 0 && (
+      {(analysis.recommendations ?? []).length > 0 && (
         <View style={analysisStyles.recs}>
-          {analysis.recommendations.map((rec, i) => (
+          {(analysis.recommendations ?? []).map((rec, i) => (
             <View key={i} style={analysisStyles.recRow}>
               <Ionicons name="arrow-forward-circle-outline" size={16} color={theme.colors.primary} />
               <Text style={analysisStyles.recText}>{rec}</Text>
@@ -417,7 +418,9 @@ const styles = StyleSheet.create({
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   analyzeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.primary },
+  analyzeBtnDisabled: { borderColor: theme.colors.border, opacity: 0.5 },
   analyzeBtnText: { fontSize: 12, color: theme.colors.primary, fontWeight: '600' },
+  analyzeBtnTextDisabled: { color: theme.colors.textMuted },
 });
 
 const cardStyles = StyleSheet.create({

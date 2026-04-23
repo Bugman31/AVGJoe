@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as sharedProgramService from '../services/sharedProgram.service';
+import { env } from '../config/env';
 
 const createSchema = z.object({
   name: z.string().min(1, 'name is required'),
@@ -12,6 +13,8 @@ const createSchema = z.object({
   equipment: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   workoutPlan: z.record(z.unknown()).optional(),
+  price: z.number().min(0).default(0),
+  currency: z.string().default('USD'),
 });
 
 const rateSchema = z.object({
@@ -61,6 +64,13 @@ export async function getOne(req: Request, res: Response, next: NextFunction): P
 export async function enroll(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const sharedProgram = await sharedProgramService.getSharedProgram(req.params.id);
+
+    // Paid programs gate — enrolling in a paid program is blocked until payment is live
+    if ((sharedProgram.price ?? 0) > 0 && env.ENABLE_PAID_PROGRAMS === 'true') {
+      res.status(402).json({ error: 'Payment required — paid program purchasing is not yet available.' });
+      return;
+    }
+
     const result = await sharedProgramService.enrollInProgram(
       req.user.id,
       req.params.id,

@@ -16,6 +16,8 @@ export interface CreateSharedProgramData {
   equipment?: string[];
   tags?: string[];
   workoutPlan?: Record<string, unknown>;
+  price?: number;
+  currency?: string;
   creatorName?: string;
   creatorAvatar?: string;
 }
@@ -65,6 +67,8 @@ export async function createSharedProgram(
       difficulty: data.difficulty ?? 'intermediate',
       durationWeeks: data.durationWeeks ?? 4,
       daysPerWeek: data.daysPerWeek ?? 3,
+      price: data.price ?? 0,
+      currency: data.currency ?? 'USD',
       equipment: serialized.equipment,
       tags: serialized.tags,
       workoutPlan: serialized.workoutPlan,

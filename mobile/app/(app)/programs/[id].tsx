@@ -13,12 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { SharedProgram } from '@/types';
 
 export default function ProgramDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
 
   const [program, setProgram] = useState<SharedProgram | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,6 +125,20 @@ export default function ProgramDetailScreen() {
             <Text style={styles.badgeText}>{program.difficulty}</Text>
           </View>
         </View>
+
+        {/* Price */}
+        {(program.price ?? 0) === 0 ? (
+          <View style={styles.priceRow}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
+            <Text style={styles.priceFree}>Free</Text>
+          </View>
+        ) : (
+          <View style={styles.priceRow}>
+            <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.priceBeta}>Free during beta</Text>
+            <Text style={styles.priceFuture}>· ${program.price.toFixed(2)} when launched</Text>
+          </View>
+        )}
 
         {/* Stats */}
         <View style={styles.statsRow}>
@@ -233,6 +249,10 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   ratingText: { fontSize: typography.md, color: colors.text, fontWeight: '600', marginLeft: spacing.xs },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  priceFree: { fontSize: typography.md, fontWeight: '700', color: colors.accent },
+  priceBeta: { fontSize: typography.md, fontWeight: '700', color: colors.textSecondary },
+  priceFuture: { fontSize: typography.sm, color: colors.textMuted },
   description: { fontSize: typography.md, color: colors.textSecondary, lineHeight: 22 },
   enrollBtn: {
     backgroundColor: colors.accent,

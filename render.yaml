@@ -21,6 +21,8 @@ services:
         sync: false  # set manually in dashboard (64 hex chars)
       - key: ANTHROPIC_API_KEY
         sync: false  # set manually in dashboard
+      - key: ENABLE_PAID_PROGRAMS
+        value: "false"
       - key: FRONTEND_URL
         value: "*"  # update to your frontend URL once deployed
 

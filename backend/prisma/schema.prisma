@@ -256,6 +256,8 @@ model SharedProgram {
   equipment       String   @default("[]")   // JSON array
   tags            String   @default("[]")   // JSON array
   workoutPlan     String   @default("{}")   // JSON object
+  price           Float    @default(0)
+  currency        String   @default("USD")
   ratingAverage   Float    @default(0)
   enrollmentCount Int      @default(0)
   isPublished     Boolean  @default(true)
