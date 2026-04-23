@@ -54,7 +54,7 @@ export default function ProgramScreen() {
     }
   };
 
-  const hasAiProvider = !!(user?.hasAnthropicKey || user?.hasOpenAiKey);
+  const hasAiProvider = !!(user?.serverHasAiKey || user?.hasAnthropicKey || user?.hasOpenAiKey);
 
   async function onRefresh() {
     setRefreshing(true);

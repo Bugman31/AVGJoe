@@ -10,6 +10,7 @@ declare global {
         onboardingCompleted: boolean;
         hasAnthropicKey: boolean;
         hasOpenAiKey: boolean;
+        serverHasAiKey: boolean;
         aiProvider: 'anthropic' | 'openai';
       };
     }

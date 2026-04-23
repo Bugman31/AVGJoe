@@ -50,6 +50,7 @@ export async function authMiddleware(
         onboardingCompleted: userWithProfile.profile?.onboardingCompleted ?? false,
         hasAnthropicKey: !!userWithProfile.anthropicApiKey,
         hasOpenAiKey: !!userWithProfile.openaiApiKey,
+        serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),
         aiProvider: (userWithProfile.aiProvider ?? 'anthropic') as 'anthropic' | 'openai',
       }
     : null;

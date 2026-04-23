@@ -366,7 +366,17 @@ export default function ProfileScreen() {
           {/* AI Provider */}
           <Card>
             <Text style={styles.sectionTitle}>AI Provider</Text>
-            <Text style={styles.hint}>Choose which AI powers your workout and program generation.</Text>
+            {user?.serverHasAiKey ? (
+              <>
+                <View style={styles.serverKeyBanner}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
+                  <Text style={styles.serverKeyText}>AI is powered by the app — no key needed.</Text>
+                </View>
+                <Text style={styles.hint}>Optionally, use your own key below to override the app default.</Text>
+              </>
+            ) : (
+              <Text style={styles.hint}>Add your own API key to enable AI-powered program generation.</Text>
+            )}
             <View style={styles.providerToggle}>
               <TouchableOpacity
                 style={[styles.providerBtn, aiProvider === 'anthropic' && styles.providerBtnActive]}
@@ -388,7 +398,7 @@ export default function ProfileScreen() {
             {aiProvider === 'anthropic' ? (
               <>
                 <Input
-                  label="Anthropic API Key"
+                  label={user?.serverHasAiKey ? 'Your Anthropic Key (optional override)' : 'Anthropic API Key'}
                   value={anthropicKey}
                   onChangeText={setAnthropicKey}
                   placeholder={user?.hasAnthropicKey ? '••••••• (saved)' : 'sk-ant-...'}
@@ -397,18 +407,20 @@ export default function ProfileScreen() {
                   autoCorrect={false}
                   testID="api-key-input"
                 />
-                <TouchableOpacity
-                  style={styles.getKeyLink}
-                  onPress={() => Linking.openURL('https://console.anthropic.com/settings/keys')}
-                >
-                  <Ionicons name="open-outline" size={13} color={colors.accent} />
-                  <Text style={styles.getKeyText}>Get your Anthropic API key →</Text>
-                </TouchableOpacity>
+                {!user?.serverHasAiKey && (
+                  <TouchableOpacity
+                    style={styles.getKeyLink}
+                    onPress={() => Linking.openURL('https://console.anthropic.com/settings/keys')}
+                  >
+                    <Ionicons name="open-outline" size={13} color={colors.accent} />
+                    <Text style={styles.getKeyText}>Get your Anthropic API key →</Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>
                 <Input
-                  label="OpenAI API Key"
+                  label={user?.serverHasAiKey ? 'Your OpenAI Key (optional override)' : 'OpenAI API Key'}
                   value={openaiKey}
                   onChangeText={setOpenaiKey}
                   placeholder={user?.hasOpenAiKey ? '••••••• (saved)' : 'sk-...'}
@@ -417,13 +429,15 @@ export default function ProfileScreen() {
                   autoCorrect={false}
                   testID="openai-key-input"
                 />
-                <TouchableOpacity
-                  style={styles.getKeyLink}
-                  onPress={() => Linking.openURL('https://platform.openai.com/api-keys')}
-                >
-                  <Ionicons name="open-outline" size={13} color={colors.accent} />
-                  <Text style={styles.getKeyText}>Get your OpenAI API key →</Text>
-                </TouchableOpacity>
+                {!user?.serverHasAiKey && (
+                  <TouchableOpacity
+                    style={styles.getKeyLink}
+                    onPress={() => Linking.openURL('https://platform.openai.com/api-keys')}
+                  >
+                    <Ionicons name="open-outline" size={13} color={colors.accent} />
+                    <Text style={styles.getKeyText}>Get your OpenAI API key →</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
             <Text style={styles.hint}>Your key is stored encrypted and never shared.</Text>
@@ -479,6 +493,8 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row', gap: spacing.sm },
   sectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
   hint: { fontSize: typography.xs, color: colors.textMuted, marginTop: spacing.xs },
+  serverKeyBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  serverKeyText: { fontSize: typography.sm, color: colors.accent, fontWeight: '600' },
   getKeyLink: {
     flexDirection: 'row',
     alignItems: 'center',

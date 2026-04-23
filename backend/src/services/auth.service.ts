@@ -22,6 +22,7 @@ interface SafeUser {
   updatedAt: Date;
   hasAnthropicKey: boolean;
   hasOpenAiKey: boolean;
+  serverHasAiKey: boolean;
   aiProvider: AiProvider;
 }
 
@@ -49,6 +50,7 @@ function toSafeUser(u: {
     updatedAt: u.updatedAt,
     hasAnthropicKey: !!u.anthropicApiKey,
     hasOpenAiKey: !!u.openaiApiKey,
+    serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),
     aiProvider: (u.aiProvider as AiProvider) ?? 'anthropic',
   };
 }

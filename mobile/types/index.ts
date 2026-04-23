@@ -7,6 +7,7 @@ export interface User {
   avatarUrl?: string | null;
   hasAnthropicKey?: boolean;
   hasOpenAiKey?: boolean;
+  serverHasAiKey?: boolean;
   aiProvider?: 'anthropic' | 'openai';
   onboardingCompleted?: boolean;
   createdAt?: string;
