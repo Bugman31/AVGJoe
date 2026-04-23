@@ -38,8 +38,11 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
 export async function completeOnboarding(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = onboardingSchema.parse(req.body);
-    const profile = await profileService.saveOnboarding(req.user.id, data);
-    res.status(201).json({ profile });
+    const [profile, program] = await Promise.all([
+      profileService.saveOnboarding(req.user.id, data),
+      profileService.assignPreloadedProgram(req.user.id, data),
+    ]);
+    res.status(201).json({ profile, program });
   } catch (err) {
     next(err);
   }

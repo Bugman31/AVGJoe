@@ -54,8 +54,7 @@ export default function ProgramScreen() {
     }
   };
 
-  // Treat as having AI if cached user says so OR if we don't know yet (let backend decide)
-  const hasAiProvider = true;
+  const hasAiProvider = !!(user?.hasAnthropicKey || user?.hasOpenAiKey);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -156,6 +155,19 @@ export default function ProgramScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {!hasAiProvider && (
+          <View style={styles.aiBanner}>
+            <Ionicons name="information-circle-outline" size={18} color={theme.colors.primary} />
+            <Text style={styles.aiBannerText}>
+              Add your API key in{' '}
+              <Text style={styles.aiBannerLink} onPress={() => router.push('/(app)/profile')}>
+                Profile → AI Provider
+              </Text>{' '}
+              to generate a personalized program.
+            </Text>
+          </View>
+        )}
 
         {!program ? (
           <View style={styles.emptyState}>
@@ -377,6 +389,10 @@ const styles = StyleSheet.create({
   generateBtnDisabled: { borderColor: theme.colors.border },
   generateBtnText: { fontSize: 13, color: theme.colors.primary, fontWeight: '600' },
   generateBtnTextDisabled: { color: theme.colors.textMuted },
+  // AI banner
+  aiBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: 10, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
+  aiBannerText: { flex: 1, fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 },
+  aiBannerLink: { color: theme.colors.primary, fontWeight: '600' },
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text, marginBottom: 8 },

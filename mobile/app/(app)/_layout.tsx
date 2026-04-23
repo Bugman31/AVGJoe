@@ -53,7 +53,7 @@ export default function AppLayout() {
           bottom: 24,
           left: 20,
           right: 20,
-          height: 64,
+          height: 70,
           borderRadius: 32,
           backgroundColor: tabBarBg,
           borderTopWidth: 0,
@@ -69,8 +69,8 @@ export default function AppLayout() {
         tabBarBackground: Platform.OS === 'ios' ? () => <FloatingTabBarBackground /> : undefined,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.35)',
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 4 },
-        tabBarItemStyle: { paddingTop: 8 },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
+        tabBarItemStyle: { paddingTop: 6, paddingBottom: 6 },
       }}
     >
       <Tabs.Screen
