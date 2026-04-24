@@ -22,7 +22,7 @@ export function BrandHeader() {
       <View style={styles.inner}>
         <View style={styles.logoRow}>
           <Ionicons name="barbell" size={20} color={colors.accent} />
-          <Text style={[styles.brand, { color: colors.accent }]}>AVG JOE'S</Text>
+          <Text style={[styles.brand, { color: colors.accent }]}>Average Joe's</Text>
         </View>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>Workout Tracker</Text>
       </View>
