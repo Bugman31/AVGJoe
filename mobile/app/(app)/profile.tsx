@@ -238,7 +238,7 @@ export default function ProfileScreen() {
           </Card>
 
           {/* Training profile */}
-          <TouchableOpacity style={rowStyles.row} onPress={() => router.push('/(onboarding)/')}>
+          <TouchableOpacity style={rowStyles.row} onPress={() => router.push('/(onboarding)/?edit=1')}>
             <Ionicons name="barbell-outline" size={20} color={colors.accent} />
             <Text style={rowStyles.rowText}>Edit Training Profile</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />

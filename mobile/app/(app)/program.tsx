@@ -8,6 +8,10 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +44,10 @@ export default function ProgramScreen() {
   const [analyzingWeek, setAnalyzingWeek] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWorkoutId, setStartingWorkoutId] = useState<string | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [customization, setCustomization] = useState('');
+  // undefined = not yet fetched, null = fetch failed/no profile, object = loaded
+  const [trainingProfile, setTrainingProfile] = useState<Record<string, unknown> | null | undefined>(undefined);
 
   const handleStartWorkout = async (plannedWorkout: PlannedWorkout) => {
     if (!program) return;
@@ -76,25 +84,42 @@ export default function ProgramScreen() {
     } catch {}
   };
 
-  const handleGenerate = async () => {
-    Alert.alert(
-      'Generate New Program',
-      'This will archive your current program and create a new one based on your profile. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Generate',
-          onPress: async () => {
-            try {
-              await generateProgram();
-              await reload();
-            } catch (e) {
-              Alert.alert('Error', (e as Error).message);
-            }
-          },
-        },
-      ]
-    );
+  const handleGenerate = () => {
+    setCustomization('');
+    setTrainingProfile(undefined); // reset to loading state
+    setShowGenerateModal(true);
+    // Fetch training profile for review in the modal
+    api.get<{ profile: Record<string, unknown> }>('/api/profile/me')
+      .then((res) => setTrainingProfile(res.profile ?? null))
+      .catch(() => setTrainingProfile(null));
+  };
+
+  function formatGoalLabel(val: string | undefined): string {
+    if (!val) return 'Not set';
+    return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function buildProfileSummary(): string | null {
+    if (!trainingProfile) return null;
+    const p = trainingProfile;
+    const lines: string[] = [];
+    if (p.primaryGoal) lines.push(`Goal: ${formatGoalLabel(p.primaryGoal as string)}`);
+    if (p.experienceLevel) lines.push(`Level: ${formatGoalLabel(p.experienceLevel as string)}`);
+    if (p.daysPerWeek) lines.push(`${p.daysPerWeek} days/week`);
+    if (p.sessionDurationMins) lines.push(`${p.sessionDurationMins} min sessions`);
+    if (p.preferredSplit) lines.push(`Split: ${formatGoalLabel(p.preferredSplit as string)}`);
+    if (p.workoutEnvironment) lines.push(`Env: ${formatGoalLabel(p.workoutEnvironment as string)}`);
+    return lines.length > 0 ? lines.join('  ·  ') : null;
+  }
+
+  const confirmGenerate = async () => {
+    setShowGenerateModal(false);
+    try {
+      await generateProgram(customization.trim() || undefined);
+      await reload();
+    } catch (e) {
+      Alert.alert('Error', (e as Error).message);
+    }
   };
 
   const handleAnalyzeWeek = async () => {
@@ -144,31 +169,19 @@ export default function ProgramScreen() {
               <Text style={styles.browseBtnText}>Browse</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.generateBtn, !hasAiProvider && styles.generateBtnDisabled]}
+              style={styles.generateBtn}
               onPress={handleGenerate}
               disabled={isGenerating}
             >
               {isGenerating
                 ? <ActivityIndicator size="small" color={theme.colors.primary} />
-                : <><Ionicons name="sparkles" size={16} color={hasAiProvider ? theme.colors.primary : theme.colors.textMuted} />
-                  <Text style={[styles.generateBtnText, !hasAiProvider && styles.generateBtnTextDisabled]}>Generate</Text></>
+                : <><Ionicons name="sparkles" size={16} color={theme.colors.primary} />
+                  <Text style={styles.generateBtnText}>Generate</Text></>
               }
             </TouchableOpacity>
           </View>
         </View>
 
-        {!hasAiProvider && (
-          <View style={styles.aiBanner}>
-            <Ionicons name="information-circle-outline" size={18} color={theme.colors.primary} />
-            <Text style={styles.aiBannerText}>
-              Add your API key in{' '}
-              <Text style={styles.aiBannerLink} onPress={() => router.push('/(app)/profile')}>
-                Profile → AI Provider
-              </Text>{' '}
-              to generate a personalized program.
-            </Text>
-          </View>
-        )}
 
         {!program ? (
           <View style={styles.emptyState}>
@@ -301,6 +314,84 @@ export default function ProgramScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Generate Program Modal */}
+      <Modal visible={showGenerateModal} transparent animationType="slide">
+        <View style={styles.genOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.genCard}>
+              <Text style={styles.genTitle}>Generate My Program</Text>
+              <Text style={styles.genSubtitle}>
+                AI will build a 4-week program from your profile using proven templates.
+                {program ? ' Your current program will be archived.' : ''}
+              </Text>
+
+              {/* Training profile summary */}
+              {trainingProfile === undefined ? (
+                // Loading
+                <View style={styles.genProfile}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                </View>
+              ) : trainingProfile === null ? (
+                // Failed / no profile set
+                <View style={styles.genProfileEmpty}>
+                  <Ionicons name="person-outline" size={14} color={theme.colors.textMuted} />
+                  <Text style={styles.genProfileEmptyText}>
+                    No training profile yet.{' '}
+                    <Text style={styles.genProfileEdit} onPress={() => { setShowGenerateModal(false); router.push('/(onboarding)/'); }}>
+                      Set yours →
+                    </Text>
+                  </Text>
+                </View>
+              ) : (
+                // Loaded
+                <View style={styles.genProfile}>
+                  <View style={styles.genProfileHeader}>
+                    <Text style={styles.genProfileLabel}>Your Training Profile</Text>
+                    <TouchableOpacity onPress={() => { setShowGenerateModal(false); router.push('/(onboarding)/?edit=1'); }}>
+                      <Text style={styles.genProfileEdit}>Edit →</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.genProfileText}>{buildProfileSummary() ?? 'Profile incomplete — tap Edit to fill it in.'}</Text>
+                </View>
+              )}
+
+              {!hasAiProvider && (
+                <TouchableOpacity
+                  style={styles.genKeyWarning}
+                  onPress={() => { setShowGenerateModal(false); router.push('/(app)/profile'); }}
+                >
+                  <Ionicons name="key-outline" size={14} color={theme.colors.warning} />
+                  <Text style={styles.genKeyWarningText}>
+                    No AI key detected — tap to add one in Profile, or it will use the server key if available.
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <Text style={styles.genInputLabel}>Customization (optional)</Text>
+              <TextInput
+                style={styles.genInput}
+                placeholder="e.g. I have a bad shoulder, prefer dumbbells, want more cardio…"
+                placeholderTextColor={theme.colors.textMuted}
+                value={customization}
+                onChangeText={setCustomization}
+                multiline
+                numberOfLines={3}
+              />
+
+              <View style={styles.genButtons}>
+                <TouchableOpacity style={styles.genCancel} onPress={() => setShowGenerateModal(false)}>
+                  <Text style={styles.genCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.genConfirm} onPress={confirmGenerate}>
+                  <Ionicons name="sparkles" size={16} color="#fff" />
+                  <Text style={styles.genConfirmText}>Generate</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -421,6 +512,27 @@ const styles = StyleSheet.create({
   analyzeBtnDisabled: { borderColor: theme.colors.border, opacity: 0.5 },
   analyzeBtnText: { fontSize: 12, color: theme.colors.primary, fontWeight: '600' },
   analyzeBtnTextDisabled: { color: theme.colors.textMuted },
+  // Generate modal
+  genOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  genCard: { backgroundColor: theme.colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 14 },
+  genTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
+  genSubtitle: { fontSize: 14, color: theme.colors.textSecondary, marginTop: -6 },
+  genProfile: { backgroundColor: theme.colors.bg, borderRadius: 10, padding: 12, gap: 6, borderWidth: 1, borderColor: theme.colors.border },
+  genProfileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  genProfileLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  genProfileEdit: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
+  genProfileText: { fontSize: 13, color: theme.colors.text, lineHeight: 18 },
+  genProfileEmpty: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.bg, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: theme.colors.border },
+  genProfileEmptyText: { fontSize: 13, color: theme.colors.textMuted },
+  genInputLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: -6 },
+  genInput: { backgroundColor: theme.colors.bg, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12, color: theme.colors.text, fontSize: 14, minHeight: 72, textAlignVertical: 'top' },
+  genButtons: { flexDirection: 'row', gap: 10 },
+  genCancel: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.border },
+  genCancelText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: '600' },
+  genConfirm: { flex: 2, flexDirection: 'row', gap: 6, backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  genConfirmText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  genKeyWarning: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: theme.colors.bg, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: theme.colors.warning + '40' },
+  genKeyWarningText: { flex: 1, fontSize: 12, color: theme.colors.warning, lineHeight: 17 },
 });
 
 const cardStyles = StyleSheet.create({

@@ -23,11 +23,11 @@ export function useProgram() {
 
   useEffect(() => { load(); }, [load]);
 
-  const generateProgram = useCallback(async () => {
+  const generateProgram = useCallback(async (customization?: string) => {
     setIsGenerating(true);
     setError(null);
     try {
-      const res = await api.post<{ program: Program }>('/api/ai/generate-program', {});
+      const res = await api.post<{ program: Program }>('/api/ai/generate-program', { customization });
       setPrograms((prev) => [res.program, ...prev]);
       return res.program;
     } catch (e) {

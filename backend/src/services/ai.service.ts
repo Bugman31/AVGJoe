@@ -448,19 +448,88 @@ function buildWeekUserPrompt(
   return lines.join('\n');
 }
 
-function validateProgramStructure(val: unknown): val is AiProgramStructure {
-  if (typeof val !== 'object' || val === null) return false;
-  const v = val as Record<string, unknown>;
-  return typeof v.programName === 'string' && typeof v.totalWeeks === 'number';
+// ── Template-based generation helpers ──
+
+interface AiCustomization {
+  programName: string;
+  programDescription: string;
+  goalSummary: string;
+  exerciseSwaps?: Array<{ templateName: string; oldExercise: string; newExercise: string }>;
+  workoutNotes?: Array<{ templateName: string; coachNote: string }>;
 }
 
-function validateWeekWorkouts(val: unknown): val is AiWeekWorkouts {
-  if (typeof val !== 'object' || val === null) return false;
-  const v = val as Record<string, unknown>;
-  return typeof v.weekNumber === 'number' && Array.isArray(v.workouts);
+const TRAINING_DAYS: Record<number, string[]> = {
+  1: ['Wednesday'],
+  2: ['Monday', 'Thursday'],
+  3: ['Monday', 'Wednesday', 'Friday'],
+  4: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+  5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+  6: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+};
+
+function selectTemplateNames(profile: OnboardingData): string[] {
+  const days = profile.daysPerWeek;
+  if (days <= 3) return ['Full Body A', 'Full Body B'];
+  if (days === 4) return ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'];
+  return ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Full Body A'];
 }
 
-export async function generateProgram(userId: string): Promise<AiGeneratedProgram> {
+type TemplateRow = Awaited<ReturnType<typeof prisma.workoutTemplate.findFirst>> & {
+  exercises: Array<{
+    name: string;
+    orderIndex: number;
+    notes: string | null;
+    sets: Array<{ setNumber: number; targetReps: number | null; targetWeight: number | null; unit: string }>;
+  }>;
+};
+
+function templateToWorkout(
+  template: NonNullable<TemplateRow>,
+  weekNumber: number,
+  dayOfWeek: string,
+  coachNote: string
+): AiPlannedWorkout {
+  const repBonus = weekNumber < 4 ? weekNumber - 1 : 0;
+
+  const exercises: AiPlannedExercise[] = template.exercises.map((ex) => {
+    let sets: AiPlannedExerciseSet[] = ex.sets.map((s) => ({
+      setNumber: s.setNumber,
+      targetReps: s.targetReps !== null ? s.targetReps + repBonus : null,
+      targetWeight: null,
+      rpeTarget: null,
+      unit: s.unit,
+    }));
+    // Deload week: drop to ~2/3 of sets
+    if (weekNumber === 4) {
+      sets = sets.slice(0, Math.max(2, Math.floor(sets.length * 0.67)));
+    }
+    return { name: ex.name, orderIndex: ex.orderIndex, notes: ex.notes ?? '', sets };
+  });
+
+  return {
+    weekNumber,
+    dayOfWeek,
+    name: weekNumber === 4 ? `${template.name} (Deload)` : template.name,
+    focus: template.name,
+    estimatedDuration: weekNumber === 4 ? 40 : 65,
+    warmup: [
+      { name: '5 min light cardio', duration: '5 min' },
+      { name: 'Dynamic mobility / activation', duration: '5 min' },
+    ],
+    exercises,
+    conditioning: null,
+    coachNotes: coachNote || (template.description ?? ''),
+  };
+}
+
+function validateAiCustomization(val: unknown): val is AiCustomization {
+  if (typeof val !== 'object' || val === null) return false;
+  const v = val as Record<string, unknown>;
+  return typeof v.programName === 'string' && typeof v.goalSummary === 'string';
+}
+
+export async function generateProgram(userId: string, customization?: string): Promise<AiGeneratedProgram> {
   const [resolved, profileRow] = await Promise.all([
     resolveAi(userId),
     prisma.userProfile.findUnique({ where: { userId } }),
@@ -496,37 +565,110 @@ export async function generateProgram(userId: string): Promise<AiGeneratedProgra
     unitSystem: profileRow.unitSystem,
   };
 
-  // Call 1: program skeleton — fast, ~2000 tokens
-  const structure = await callAiWithRetry<AiProgramStructure>(
-    resolved,
-    buildStructureSystemPrompt(),
-    buildStructureUserPrompt(profile),
-    validateProgramStructure,
-    2000
-  );
+  // Load preloaded seed templates matching the user's schedule
+  const templateNames = selectTemplateNames(profile);
+  const rawTemplates = await prisma.workoutTemplate.findMany({
+    where: { source: 'preloaded', name: { in: templateNames } },
+    include: {
+      exercises: {
+        orderBy: { orderIndex: 'asc' },
+        include: { sets: { orderBy: { setNumber: 'asc' } } },
+      },
+    },
+  });
 
-  // Call 2+: one call per week, all in parallel — each ~3500 tokens
-  const weekNumbers = Array.from({ length: structure.totalWeeks }, (_, i) => i + 1);
-  const weekResults = await Promise.all(
-    weekNumbers.map((weekNum) =>
-      callAiWithRetry<AiWeekWorkouts>(
-        resolved,
-        buildWeekSystemPrompt(),
-        buildWeekUserPrompt(profile, structure, weekNum),
-        validateWeekWorkouts,
-        3500
-      )
-    )
-  );
+  // Order templates to match templateNames sequence
+  const templates = templateNames
+    .map((n) => rawTemplates.find((t) => t.name === n))
+    .filter((t): t is NonNullable<typeof t> => t !== undefined);
+
+  if (templates.length === 0) {
+    const err = new Error('Seed templates not found. Please contact support.') as Error & { statusCode: number };
+    err.statusCode = 500;
+    throw err;
+  }
+
+  // ONE small AI call: program name, description, goal summary, optional swaps/notes
+  const profileSummary = [
+    `Goal: ${profile.primaryGoal}`,
+    `Level: ${profile.experienceLevel}`,
+    `Days: ${profile.daysPerWeek}/week`,
+    `Duration: ${profile.sessionDurationMins} min`,
+    `Equipment: ${profile.availableEquipment.join(', ') || 'full gym'}`,
+    `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
+  ].join(', ');
+
+  const customNote = customization ? `\nCustomization request: "${customization}"` : '';
+
+  const userPrompt = `Athlete profile: ${profileSummary}${customNote}
+Templates being used: ${templateNames.join(', ')}
+Return JSON (no text outside JSON):
+{
+  "programName": "3-6 word name",
+  "programDescription": "2-3 sentence program description",
+  "goalSummary": "2-3 sentence coaching summary for this athlete",
+  "exerciseSwaps": [{"templateName":"string","oldExercise":"string","newExercise":"string"}],
+  "workoutNotes": [{"templateName":"string","coachNote":"string"}]
+}
+Only include exerciseSwaps if equipment or restrictions require it. Provide one workoutNotes entry per template.`;
+
+  let aiCustom: AiCustomization;
+  try {
+    aiCustom = await callAiWithRetry<AiCustomization>(
+      resolved,
+      'You are a fitness program designer. Return ONLY valid JSON matching the schema. No markdown.',
+      userPrompt,
+      validateAiCustomization,
+      900
+    );
+  } catch {
+    aiCustom = {
+      programName: `${profile.daysPerWeek}-Day ${profile.primaryGoal} Program`,
+      programDescription: `A ${profile.daysPerWeek}-day per week program tailored to your ${profile.primaryGoal} goals with proven evidence-based templates.`,
+      goalSummary: `This program is designed for a ${profile.experienceLevel} athlete focused on ${profile.primaryGoal}. Training ${profile.daysPerWeek} days per week with sessions around ${profile.sessionDurationMins} minutes.`,
+    };
+  }
+
+  // Build swap + note lookup maps
+  const swapMap = new Map<string, Map<string, string>>();
+  for (const swap of aiCustom.exerciseSwaps ?? []) {
+    if (!swapMap.has(swap.templateName)) swapMap.set(swap.templateName, new Map());
+    swapMap.get(swap.templateName)!.set(swap.oldExercise, swap.newExercise);
+  }
+  const noteMap = new Map<string, string>();
+  for (const note of aiCustom.workoutNotes ?? []) {
+    noteMap.set(note.templateName, note.coachNote);
+  }
+
+  // Build 4-week schedule
+  const totalWeeks = 4;
+  const trainingDays = TRAINING_DAYS[Math.min(profile.daysPerWeek, 7)] ?? TRAINING_DAYS[3];
+  const workouts: AiPlannedWorkout[] = [];
+
+  for (let week = 1; week <= totalWeeks; week++) {
+    trainingDays.forEach((day, dayIdx) => {
+      const template = templates[dayIdx % templates.length];
+      const swaps = swapMap.get(template.name);
+      const modifiedTemplate = swaps
+        ? { ...template, exercises: template.exercises.map((ex) => ({ ...ex, name: swaps.get(ex.name) ?? ex.name })) }
+        : template;
+      workouts.push(templateToWorkout(modifiedTemplate, week, day, noteMap.get(template.name) ?? ''));
+    });
+  }
+
+  const splitName = profile.daysPerWeek <= 3 ? 'Full Body' : profile.daysPerWeek === 4 ? 'PPL + Upper' : 'Push/Pull/Legs';
 
   return {
-    programName: structure.programName,
-    programDescription: structure.programDescription,
-    totalWeeks: structure.totalWeeks,
-    weeklyStructure: structure.weeklyStructure,
-    progressionRules: structure.progressionRules,
-    aiGoalSummary: structure.aiGoalSummary,
-    workouts: weekResults.flatMap((w) => w.workouts),
+    programName: aiCustom.programName,
+    programDescription: aiCustom.programDescription,
+    totalWeeks,
+    weeklyStructure: { split: splitName, days: trainingDays },
+    progressionRules: {
+      mainLifts: 'Add 1 rep per set each week (weeks 1–3); week 4 is a deload with reduced volume.',
+      accessories: 'Maintain weight, focus on form and full range of motion.',
+    },
+    aiGoalSummary: aiCustom.goalSummary,
+    workouts,
   };
 }
 

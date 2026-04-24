@@ -32,32 +32,16 @@ interface UpdateTemplateData {
 }
 
 export async function listTemplates(userId: string) {
-  const [mine, preloaded] = await Promise.all([
-    prisma.workoutTemplate.findMany({
-      where: { userId },
-      include: {
-        exercises: {
-          orderBy: { orderIndex: 'asc' },
-          include: { sets: { orderBy: { setNumber: 'asc' } } },
-        },
+  return prisma.workoutTemplate.findMany({
+    where: { userId, source: { not: 'preloaded' } },
+    include: {
+      exercises: {
+        orderBy: { orderIndex: 'asc' },
+        include: { sets: { orderBy: { setNumber: 'asc' } } },
       },
-      orderBy: { createdAt: 'desc' },
-    }),
-    prisma.workoutTemplate.findMany({
-      where: { source: 'preloaded' },
-      include: {
-        exercises: {
-          orderBy: { orderIndex: 'asc' },
-          include: { sets: { orderBy: { setNumber: 'asc' } } },
-        },
-      },
-      orderBy: { name: 'asc' },
-    }),
-  ]);
-
-  // User's own templates first, then preloaded (exclude any preloaded the user somehow owns)
-  const myIds = new Set(mine.map((t) => t.id));
-  return [...mine, ...preloaded.filter((t) => !myIds.has(t.id))];
+    },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 export async function getTemplate(id: string, userId: string) {

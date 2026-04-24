@@ -20,6 +20,7 @@ export interface CreateSharedProgramData {
   currency?: string;
   creatorName?: string;
   creatorAvatar?: string;
+  coverImageUrl?: string;
 }
 
 export interface ListSharedProgramsOpts {
@@ -61,6 +62,7 @@ export async function createSharedProgram(
       creatorId,
       creatorName: data.creatorName ?? '',
       creatorAvatar: data.creatorAvatar ?? null,
+      coverImageUrl: data.coverImageUrl ?? null,
       name: data.name,
       description: data.description,
       category: data.category ?? 'general',

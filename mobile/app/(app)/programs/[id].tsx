@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -83,9 +84,7 @@ export default function ProgramDetailScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color={colors.accent} /></View>
       </SafeAreaView>
     );
   }
@@ -103,103 +102,132 @@ export default function ProgramDetailScreen() {
     );
   }
 
+  const stars = Math.round(program.ratingAverage ?? 0);
+
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Back button */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={24} color={colors.text} />
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false}>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Program name */}
-        <Text style={styles.title}>{program.name}</Text>
-        <Text style={styles.creator}>by {program.creatorName}</Text>
-
-        {/* Badges */}
-        <View style={styles.badgeRow}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{program.category}</Text>
-          </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{program.difficulty}</Text>
-          </View>
-        </View>
-
-        {/* Price */}
-        {(program.price ?? 0) === 0 ? (
-          <View style={styles.priceRow}>
-            <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
-            <Text style={styles.priceFree}>Free</Text>
-          </View>
-        ) : (
-          <View style={styles.priceRow}>
-            <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.priceBeta}>Free during beta</Text>
-            <Text style={styles.priceFuture}>· ${program.price.toFixed(2)} when launched</Text>
-          </View>
-        )}
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{program.durationWeeks}</Text>
-            <Text style={styles.statLabel}>Weeks</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{program.daysPerWeek}</Text>
-            <Text style={styles.statLabel}>Days/Week</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{program.enrollmentCount ?? 0}</Text>
-            <Text style={styles.statLabel}>Enrolled</Text>
-          </View>
-        </View>
-
-        {/* Rating display */}
-        <View style={styles.ratingRow}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <Ionicons
-              key={star}
-              name={star <= Math.round(program.ratingAverage ?? 0) ? 'star' : 'star-outline'}
-              size={20}
-              color={colors.warning}
-            />
-          ))}
-          <Text style={styles.ratingText}>{(program.ratingAverage ?? 0).toFixed(1)}</Text>
-        </View>
-
-        {/* Description */}
-        {program.description ? (
-          <Text style={styles.description}>{program.description}</Text>
-        ) : null}
-
-        {/* Enroll */}
-        <TouchableOpacity
-          style={[styles.enrollBtn, isEnrolling && styles.enrollBtnDisabled]}
-          onPress={handleEnroll}
-          disabled={isEnrolling}
-        >
-          {isEnrolling ? (
-            <ActivityIndicator size="small" color="#fff" />
+        {/* Cover image with back button overlay */}
+        <View style={styles.coverContainer}>
+          {program.coverImageUrl ? (
+            <Image source={{ uri: program.coverImageUrl }} style={styles.coverImage} resizeMode="cover" />
           ) : (
-            <Text style={styles.enrollBtnText}>Start This Program</Text>
+            <View style={styles.coverPlaceholder}>
+              <Ionicons name="barbell-outline" size={48} color={colors.textMuted} />
+            </View>
           )}
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.backOverlay} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-        {/* Rate this program */}
-        <View style={styles.rateSection}>
-          <Text style={styles.rateSectionTitle}>Rate This Program</Text>
+        <View style={styles.body}>
+          {/* Program name */}
+          <Text style={styles.title}>{program.name}</Text>
+
+          {/* Creator row */}
+          <View style={styles.creatorRow}>
+            {program.creatorAvatar ? (
+              <Image source={{ uri: program.creatorAvatar }} style={styles.creatorAvatar} />
+            ) : (
+              <View style={styles.creatorAvatarPlaceholder}>
+                <Text style={styles.creatorAvatarInitial}>
+                  {(program.creatorName ?? '?')[0].toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View>
+              <Text style={styles.creatorLabel}>Created by</Text>
+              <Text style={styles.creatorName}>{program.creatorName}</Text>
+            </View>
+          </View>
+
+          {/* Badges */}
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{program.category}</Text>
+            </View>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{program.difficulty}</Text>
+            </View>
+          </View>
+
+          {/* Price */}
+          {(program.price ?? 0) === 0 ? (
+            <View style={styles.priceRow}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
+              <Text style={styles.priceFree}>Free</Text>
+            </View>
+          ) : (
+            <View style={styles.priceRow}>
+              <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.priceBeta}>Free during beta</Text>
+              <Text style={styles.priceFuture}>· ${program.price.toFixed(2)} when launched</Text>
+            </View>
+          )}
+
+          {/* Stats */}
+          <View style={styles.statsRow}>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{program.durationWeeks}</Text>
+              <Text style={styles.statLabel}>Weeks</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{program.daysPerWeek}</Text>
+              <Text style={styles.statLabel}>Days/Week</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{program.enrollmentCount ?? 0}</Text>
+              <Text style={styles.statLabel}>Enrolled</Text>
+            </View>
+          </View>
+
+          {/* Rating display */}
           <View style={styles.ratingRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity key={star} onPress={() => handleRate(star)}>
-                <Ionicons
-                  name={star <= userRating ? 'star' : 'star-outline'}
-                  size={28}
-                  color={star <= userRating ? colors.warning : colors.textMuted}
-                />
-              </TouchableOpacity>
+            {[1,2,3,4,5].map((star) => (
+              <Ionicons
+                key={star}
+                name={star <= stars ? 'star' : 'star-outline'}
+                size={18}
+                color={colors.warning}
+              />
             ))}
+            <Text style={styles.ratingText}>{(program.ratingAverage ?? 0).toFixed(1)}</Text>
+          </View>
+
+          {/* Description */}
+          {program.description ? (
+            <Text style={styles.description}>{program.description}</Text>
+          ) : null}
+
+          {/* Enroll */}
+          <TouchableOpacity
+            style={[styles.enrollBtn, isEnrolling && styles.enrollBtnDisabled]}
+            onPress={handleEnroll}
+            disabled={isEnrolling}
+          >
+            {isEnrolling ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.enrollBtnText}>Start This Program</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Rate */}
+          <View style={styles.rateSection}>
+            <Text style={styles.rateSectionTitle}>Rate This Program</Text>
+            <View style={styles.ratingRow}>
+              {[1,2,3,4,5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => handleRate(star)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                  <Ionicons
+                    name={star <= userRating ? 'star' : 'star-outline'}
+                    size={32}
+                    color={star <= userRating ? colors.warning : colors.textMuted}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -210,6 +238,30 @@ export default function ProgramDetailScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { fontSize: typography.md, color: colors.danger, textAlign: 'center' },
+  // Cover
+  coverContainer: { position: 'relative' },
+  coverImage: { width: '100%', height: 220 },
+  coverPlaceholder: {
+    width: '100%',
+    height: 160,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backOverlay: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,14 +269,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  backText: { fontSize: typography.md, color: colors.text },
-  content: {
-    padding: spacing.lg,
-    gap: spacing.lg,
-    paddingBottom: TAB_BAR_BOTTOM_INSET,
+  // Body
+  body: { padding: spacing.lg, gap: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
+  title: { fontSize: 26, fontWeight: '800', color: colors.text, lineHeight: 32 },
+  // Creator
+  creatorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  creatorAvatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colors.border },
+  creatorAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  title: { fontSize: typography.xxxl, fontWeight: '700', color: colors.text },
-  creator: { fontSize: typography.md, color: colors.textSecondary },
+  creatorAvatarInitial: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  creatorLabel: { fontSize: typography.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  creatorName: { fontSize: typography.md, fontWeight: '700', color: colors.text },
+  // Badges
   badgeRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   badge: {
     paddingHorizontal: spacing.md,
@@ -235,6 +297,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   badgeText: { fontSize: typography.xs, color: colors.accent, fontWeight: '600', textTransform: 'capitalize' },
+  // Stats
   statsRow: { flexDirection: 'row', gap: spacing.md },
   stat: {
     flex: 1,
@@ -249,20 +312,23 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   ratingText: { fontSize: typography.md, color: colors.text, fontWeight: '600', marginLeft: spacing.xs },
+  // Price
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   priceFree: { fontSize: typography.md, fontWeight: '700', color: colors.accent },
   priceBeta: { fontSize: typography.md, fontWeight: '700', color: colors.textSecondary },
   priceFuture: { fontSize: typography.sm, color: colors.textMuted },
+  // Description
   description: { fontSize: typography.md, color: colors.textSecondary, lineHeight: 22 },
+  // Enroll
   enrollBtn: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
   },
   enrollBtnDisabled: { opacity: 0.6 },
   enrollBtnText: { fontSize: typography.lg, fontWeight: '700', color: '#fff' },
+  // Rate
   rateSection: { gap: spacing.sm },
   rateSectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text },
-  errorText: { fontSize: typography.md, color: colors.danger, textAlign: 'center' },
 });

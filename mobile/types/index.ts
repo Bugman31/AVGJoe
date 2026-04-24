@@ -314,6 +314,7 @@ export interface SharedProgram {
   creatorId: string;
   creatorName: string;
   creatorAvatar: string | null;
+  coverImageUrl: string | null;
   name: string;
   description: string | null;
   category: string;

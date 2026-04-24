@@ -15,6 +15,7 @@ const createSchema = z.object({
   workoutPlan: z.record(z.unknown()).optional(),
   price: z.number().min(0).default(0),
   currency: z.string().default('USD'),
+  coverImageUrl: z.string().optional(),
 });
 
 const rateSchema = z.object({

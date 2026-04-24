@@ -45,6 +45,13 @@ interface SetState {
   logged: boolean;
 }
 
+interface ExtraExercise {
+  name: string;
+  sets: number;
+  targetReps: number | null;
+  unit: string;
+}
+
 interface LastSetData {
   setNumber: number;
   actualReps: number | null;
@@ -75,6 +82,16 @@ export default function ActiveWorkoutScreen() {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+
+  // Extra exercises added by user during session
+  const [extraExercises, setExtraExercises] = useState<ExtraExercise[]>([]);
+  const [skippedExercises, setSkippedExercises] = useState<Set<string>>(new Set());
+
+  // Add exercise modal
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [newExName, setNewExName] = useState('');
+  const [newExSets, setNewExSets] = useState('3');
+  const [newExReps, setNewExReps] = useState('');
 
   // RPE picker state
   const [rpePickerKey, setRpePickerKey] = useState<string | null>(null);
@@ -109,7 +126,7 @@ export default function ActiveWorkoutScreen() {
         setShowPreEnergyModal(true);
       } catch {
         Toast.show({ type: 'error', text1: 'Failed to load workout' });
-        router.back();
+        if (router.canGoBack()) router.back(); else router.replace('/(app)/workouts');
       } finally {
         setIsLoading(false);
       }
@@ -143,6 +160,32 @@ export default function ActiveWorkoutScreen() {
       });
     });
     setSetStates(states);
+  }
+
+  function toggleSkip(key: string) {
+    setSkippedExercises((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function confirmAddExercise() {
+    if (!newExName.trim()) return;
+    const count = parseInt(newExSets, 10) || 3;
+    const reps = parseInt(newExReps, 10) || null;
+    const newEx: ExtraExercise = { name: newExName.trim(), sets: count, targetReps: reps, unit: 'lbs' };
+    const prefix = `extra-${extraExercises.length}`;
+    const newStates: Record<string, SetState> = {};
+    for (let i = 1; i <= count; i++) {
+      newStates[`${prefix}-${i}`] = { actualReps: '', actualWeight: '', rpe: null, logged: false };
+    }
+    setExtraExercises((prev) => [...prev, newEx]);
+    setSetStates((prev) => ({ ...prev, ...newStates }));
+    setNewExName('');
+    setNewExSets('3');
+    setNewExReps('');
+    setShowAddExercise(false);
   }
 
   function updateSetField(key: string, field: 'actualReps' | 'actualWeight', value: string) {
@@ -239,7 +282,7 @@ export default function ActiveWorkoutScreen() {
         <TouchableOpacity onPress={() => {
           Alert.alert('Exit Workout', 'Your progress is saved. Exit anyway?', [
             { text: 'Continue', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => router.back() },
+            { text: 'Exit', style: 'destructive', onPress: () => { if (router.canGoBack()) router.back(); else router.replace('/(app)/workouts'); } },
           ]);
         }}>
           <Ionicons name="close" size={24} color={theme.colors.text} />
@@ -281,86 +324,179 @@ export default function ActiveWorkoutScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {exercises.map((exercise, ei) => {
+            const skipKey = `planned-${ei}`;
+            const isSkipped = skippedExercises.has(skipKey);
             const prevSets = lastSessionData[exercise.name];
             return (
-              <Card key={ei} style={styles.exerciseCard}>
-                <Text style={styles.exerciseName}>{exercise.name}</Text>
-                {exercise.notes ? <Text style={styles.exerciseNotes}>{exercise.notes}</Text> : null}
+              <Card key={ei} style={isSkipped ? { ...styles.exerciseCard, ...styles.exerciseCardSkipped } : styles.exerciseCard}>
+                <View style={styles.exerciseHeader}>
+                  <Text style={[styles.exerciseName, isSkipped && styles.exerciseNameSkipped]}>{exercise.name}</Text>
+                  <TouchableOpacity onPress={() => toggleSkip(skipKey)} style={styles.skipBtn}>
+                    <Text style={styles.skipBtnText}>{isSkipped ? 'Undo' : 'Skip'}</Text>
+                  </TouchableOpacity>
+                </View>
 
-                {/* Previous session data */}
-                {prevSets && prevSets.length > 0 && (
-                  <View style={styles.prevRow}>
-                    <Ionicons name="time-outline" size={11} color={theme.colors.textMuted} />
-                    <Text style={styles.prevText}>
-                      Last: {prevSets.map((s) =>
-                        `${s.actualWeight ?? 'BW'}${s.unit === 'kg' ? 'kg' : 'lb'} × ${s.actualReps ?? '?'}`
-                      ).join('  ')}
-                    </Text>
-                  </View>
+                {isSkipped ? (
+                  <Text style={styles.skippedLabel}>Skipped</Text>
+                ) : (
+                  <>
+                    {exercise.notes ? <Text style={styles.exerciseNotes}>{exercise.notes}</Text> : null}
+
+                    {prevSets && prevSets.length > 0 && (
+                      <View style={styles.prevRow}>
+                        <Ionicons name="time-outline" size={11} color={theme.colors.textMuted} />
+                        <Text style={styles.prevText}>
+                          Last: {prevSets.map((s) =>
+                            `${s.actualWeight ?? 'BW'}${s.unit === 'kg' ? 'kg' : 'lb'} × ${s.actualReps ?? '?'}`
+                          ).join('  ')}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.setHeader}>
+                      <Text style={[styles.colLabel, styles.colSet]}>Set</Text>
+                      <Text style={[styles.colLabel, styles.colTarget]}>Target</Text>
+                      <Text style={[styles.colLabel, styles.colInput]}>Reps</Text>
+                      <Text style={[styles.colLabel, styles.colInput]}>Weight</Text>
+                      <Text style={[styles.colLabel, styles.colRpe]}>RPE</Text>
+                      <View style={styles.colDone} />
+                    </View>
+
+                    {exercise.sets.map((set) => {
+                      const key = `${ei}-${set.setNumber}`;
+                      const state = setStates[key] ?? { actualReps: '', actualWeight: '', rpe: null, logged: false };
+                      return (
+                        <View key={set.setNumber} style={[styles.setRow, state.logged && styles.setRowDone]}>
+                          <Text style={[styles.colSet, styles.setNum]}>{set.setNumber}</Text>
+                          <Text style={[styles.colTarget, styles.setTarget]}>
+                            {set.targetReps ? `${set.targetReps}r` : ''}
+                            {set.rpeTarget ? ` @${set.rpeTarget}` : ''}
+                          </Text>
+                          <TextInput
+                            style={[styles.inlineInput, styles.colInput, state.logged && styles.inlineInputDone]}
+                            value={state.actualReps}
+                            onChangeText={(v) => updateSetField(key, 'actualReps', v)}
+                            placeholder={set.targetReps?.toString() ?? '—'}
+                            placeholderTextColor={theme.colors.textMuted}
+                            keyboardType="number-pad"
+                            editable={!state.logged}
+                            testID={`reps-input-${ei}-${set.setNumber}`}
+                          />
+                          <TextInput
+                            style={[styles.inlineInput, styles.colInput, state.logged && styles.inlineInputDone]}
+                            value={state.actualWeight}
+                            onChangeText={(v) => updateSetField(key, 'actualWeight', v)}
+                            placeholder={set.targetWeight?.toString() ?? '0'}
+                            placeholderTextColor={theme.colors.textMuted}
+                            keyboardType="decimal-pad"
+                            editable={!state.logged}
+                            testID={`weight-input-${ei}-${set.setNumber}`}
+                          />
+                          <TouchableOpacity
+                            style={[styles.rpePill, !!state.rpe && styles.rpePillActive]}
+                            onPress={() => { if (!state.logged) setRpePickerKey(key); }}
+                            disabled={state.logged}
+                            testID={`rpe-btn-${ei}-${set.setNumber}`}
+                          >
+                            <Text style={[styles.rpePillText, !!state.rpe && styles.rpePillTextActive]}>
+                              {state.rpe ?? '—'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.doneBtn, state.logged && styles.doneBtnDone]}
+                            onPress={() => !state.logged && logSet(ei, exercise, set.setNumber, set.unit)}
+                            disabled={state.logged}
+                            testID={`done-btn-${ei}-${set.setNumber}`}
+                          >
+                            <Ionicons
+                              name={state.logged ? 'checkmark' : 'checkmark-outline'}
+                              size={18}
+                              color={state.logged ? theme.colors.success : theme.colors.textSecondary}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </>
                 )}
+              </Card>
+            );
+          })}
 
-                {/* Set header */}
+          {/* User-added extra exercises */}
+          {extraExercises.map((ex, xi) => {
+            const prefix = `extra-${xi}`;
+            return (
+              <Card key={prefix} style={styles.exerciseCard}>
+                <View style={styles.exerciseHeader}>
+                  <Text style={styles.exerciseName}>{ex.name}</Text>
+                  <View style={styles.addedBadge}><Text style={styles.addedBadgeText}>Added</Text></View>
+                </View>
                 <View style={styles.setHeader}>
                   <Text style={[styles.colLabel, styles.colSet]}>Set</Text>
                   <Text style={[styles.colLabel, styles.colTarget]}>Target</Text>
                   <Text style={[styles.colLabel, styles.colInput]}>Reps</Text>
-                  <Text style={[styles.colLabel, styles.colInput]}>Wt</Text>
+                  <Text style={[styles.colLabel, styles.colInput]}>Weight</Text>
                   <Text style={[styles.colLabel, styles.colRpe]}>RPE</Text>
                   <View style={styles.colDone} />
                 </View>
-
-                {exercise.sets.map((set) => {
-                  const key = `${ei}-${set.setNumber}`;
+                {Array.from({ length: ex.sets }, (_, si) => {
+                  const key = `${prefix}-${si + 1}`;
                   const state = setStates[key] ?? { actualReps: '', actualWeight: '', rpe: null, logged: false };
                   return (
-                    <View key={set.setNumber} style={[styles.setRow, state.logged && styles.setRowDone]}>
-                      <Text style={[styles.colSet, styles.setNum]}>{set.setNumber}</Text>
-                      <Text style={[styles.colTarget, styles.setTarget]}>
-                        {set.targetReps ? `${set.targetReps}r` : ''}
-                        {set.rpeTarget ? ` @${set.rpeTarget}` : ''}
-                      </Text>
+                    <View key={key} style={[styles.setRow, state.logged && styles.setRowDone]}>
+                      <Text style={[styles.colSet, styles.setNum]}>{si + 1}</Text>
+                      <Text style={[styles.colTarget, styles.setTarget]}>{ex.targetReps ? `${ex.targetReps}r` : ''}</Text>
                       <TextInput
                         style={[styles.inlineInput, styles.colInput, state.logged && styles.inlineInputDone]}
                         value={state.actualReps}
                         onChangeText={(v) => updateSetField(key, 'actualReps', v)}
-                        placeholder={set.targetReps?.toString() ?? ''}
+                        placeholder={ex.targetReps?.toString() ?? '—'}
                         placeholderTextColor={theme.colors.textMuted}
                         keyboardType="number-pad"
                         editable={!state.logged}
-                        testID={`reps-input-${ei}-${set.setNumber}`}
                       />
                       <TextInput
                         style={[styles.inlineInput, styles.colInput, state.logged && styles.inlineInputDone]}
                         value={state.actualWeight}
                         onChangeText={(v) => updateSetField(key, 'actualWeight', v)}
-                        placeholder={set.targetWeight?.toString() ?? ''}
+                        placeholder="0"
                         placeholderTextColor={theme.colors.textMuted}
                         keyboardType="decimal-pad"
                         editable={!state.logged}
-                        testID={`weight-input-${ei}-${set.setNumber}`}
                       />
-                      {/* RPE — opens bottom sheet picker */}
                       <TouchableOpacity
                         style={[styles.rpePill, !!state.rpe && styles.rpePillActive]}
                         onPress={() => { if (!state.logged) setRpePickerKey(key); }}
                         disabled={state.logged}
-                        testID={`rpe-btn-${ei}-${set.setNumber}`}
                       >
-                        <Text style={[styles.rpePillText, !!state.rpe && styles.rpePillTextActive]}>
-                          {state.rpe ?? '—'}
-                        </Text>
+                        <Text style={[styles.rpePillText, !!state.rpe && styles.rpePillTextActive]}>{state.rpe ?? '—'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.doneBtn, state.logged && styles.doneBtnDone]}
-                        onPress={() => !state.logged && logSet(ei, exercise, set.setNumber, set.unit)}
-                        disabled={state.logged}
-                        testID={`done-btn-${ei}-${set.setNumber}`}
+                        onPress={() => {
+                          if (state.logged) return;
+                          if (!state.actualReps || state.actualReps.trim() === '') {
+                            Toast.show({ type: 'error', text1: 'Enter reps before marking done' });
+                            return;
+                          }
+                          api.post(`/api/sessions/${sessionId}/sets`, {
+                            exerciseId: key,
+                            exerciseName: ex.name,
+                            setNumber: si + 1,
+                            actualReps: state.actualReps ? parseInt(state.actualReps, 10) : undefined,
+                            actualWeight: state.actualWeight ? parseFloat(state.actualWeight) : undefined,
+                            unit: ex.unit,
+                            rpe: state.rpe ?? undefined,
+                          }).then(() => {
+                            setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: true } }));
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                            playSound();
+                            restTimer.start();
+                          }).catch(() => Toast.show({ type: 'error', text1: 'Failed to log set' }));
+                        }}
                       >
-                        <Ionicons
-                          name={state.logged ? 'checkmark' : 'checkmark-outline'}
-                          size={18}
-                          color={state.logged ? theme.colors.success : theme.colors.textSecondary}
-                        />
+                        <Ionicons name={state.logged ? 'checkmark' : 'checkmark-outline'} size={18} color={state.logged ? theme.colors.success : theme.colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
                   );
@@ -368,6 +504,12 @@ export default function ActiveWorkoutScreen() {
               </Card>
             );
           })}
+
+          {/* Add exercise button */}
+          <TouchableOpacity style={styles.addExerciseBtn} onPress={() => setShowAddExercise(true)}>
+            <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
+            <Text style={styles.addExerciseBtnText}>Add Exercise</Text>
+          </TouchableOpacity>
 
           {/* Conditioning block */}
           {plannedWorkout?.conditioning && (
@@ -510,6 +652,67 @@ export default function ActiveWorkoutScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Add Exercise modal ─────────────────────────────────────── */}
+      <Modal visible={showAddExercise} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalTitleRow}>
+                <Text style={styles.modalTitle}>Add Exercise</Text>
+                <TouchableOpacity onPress={() => setShowAddExercise(false)}>
+                  <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.addExInput}
+                placeholder="Exercise name"
+                placeholderTextColor={theme.colors.textMuted}
+                value={newExName}
+                onChangeText={setNewExName}
+                autoFocus
+                autoCapitalize="words"
+              />
+              <View style={styles.addExRow}>
+                <View style={styles.addExField}>
+                  <Text style={styles.addExLabel}>Sets</Text>
+                  <TextInput
+                    style={styles.addExInput}
+                    value={newExSets}
+                    onChangeText={setNewExSets}
+                    keyboardType="number-pad"
+                    placeholder="3"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </View>
+                <View style={styles.addExField}>
+                  <Text style={styles.addExLabel}>Target Reps (optional)</Text>
+                  <TextInput
+                    style={styles.addExInput}
+                    value={newExReps}
+                    onChangeText={setNewExReps}
+                    keyboardType="number-pad"
+                    placeholder="—"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </View>
+              </View>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddExercise(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, !newExName.trim() && styles.modalBtnDisabled]}
+                  onPress={confirmAddExercise}
+                  disabled={!newExName.trim()}
+                >
+                  <Text style={styles.confirmBtnText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -585,16 +788,31 @@ const styles = StyleSheet.create({
   setRowDone: { opacity: 0.55 },
   setNum: { fontSize: 13, color: theme.colors.textSecondary },
   setTarget: { fontSize: 12, color: theme.colors.textMuted },
+  exerciseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  exerciseCardSkipped: { opacity: 0.5 },
+  exerciseNameSkipped: { textDecorationLine: 'line-through', color: theme.colors.textMuted },
+  skipBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border },
+  skipBtnText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
+  skippedLabel: { fontSize: 13, color: theme.colors.textMuted, fontStyle: 'italic' },
+  addExerciseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.primary + '60', borderStyle: 'dashed' },
+  addExerciseBtnText: { fontSize: 15, fontWeight: '600', color: theme.colors.primary },
+  addedBadge: { backgroundColor: theme.colors.primaryLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  addedBadgeText: { fontSize: 11, fontWeight: '700', color: theme.colors.primary, textTransform: 'uppercase' },
+  addExInput: { backgroundColor: theme.colors.surfaceHover, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12, color: theme.colors.text, fontSize: 15 },
+  addExRow: { flexDirection: 'row', gap: 12 },
+  addExField: { flex: 1, gap: 6 },
+  addExLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
   inlineInput: {
     backgroundColor: theme.colors.surfaceHover,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 6,
-    paddingVertical: 6,
-    fontSize: 14,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary + '50',
+    borderRadius: 8,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontWeight: '600',
     color: theme.colors.text,
     textAlign: 'center',
-    minHeight: 34,
+    minHeight: 38,
   },
   inlineInputDone: { borderColor: theme.colors.success + '60', color: theme.colors.success },
   rpePill: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },

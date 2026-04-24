@@ -247,6 +247,7 @@ model SharedProgram {
   creatorId       String
   creatorName     String
   creatorAvatar   String?
+  coverImageUrl   String?
   name            String
   description     String?
   category        String   @default("general")

@@ -27,13 +27,18 @@ export async function generate(
   }
 }
 
+const generateProgramSchema = z.object({
+  customization: z.string().max(500).optional(),
+});
+
 export async function generateProgram(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const aiResult = await aiService.generateProgram(req.user.id);
+    const { customization } = generateProgramSchema.parse(req.body);
+    const aiResult = await aiService.generateProgram(req.user.id, customization);
 
     const program = await programService.createProgram(req.user.id, {
       name: aiResult.programName,

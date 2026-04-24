@@ -8,10 +8,12 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -51,6 +53,7 @@ export default function ShareProgramScreen() {
   const [durationWeeks, setDurationWeeks] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState('');
   const [price, setPrice] = useState('');
+  const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchActive() {
@@ -65,6 +68,26 @@ export default function ShareProgramScreen() {
     }
     fetchActive();
   }, []);
+
+  async function pickCoverImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to add a cover image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const dataUrl = `data:image/jpeg;base64,${asset.base64}`;
+      setCoverImageUri(dataUrl);
+    }
+  }
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -90,6 +113,7 @@ export default function ShareProgramScreen() {
         tags: [],
         price: paidEnabled ? (parseFloat(price) || 0) : 0,
         currency: 'USD',
+        coverImageUrl: coverImageUri ?? undefined,
       });
       Toast.show({ type: 'success', text1: 'Program published!' });
       router.back();
@@ -116,6 +140,28 @@ export default function ShareProgramScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+
+        {/* Cover image picker */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Cover Photo</Text>
+          <TouchableOpacity style={styles.coverPicker} onPress={pickCoverImage} activeOpacity={0.8}>
+            {coverImageUri ? (
+              <>
+                <Image source={{ uri: coverImageUri }} style={styles.coverPreview} resizeMode="cover" />
+                <View style={styles.coverEditBadge}>
+                  <Ionicons name="camera" size={14} color="#fff" />
+                  <Text style={styles.coverEditText}>Change</Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.coverPlaceholder}>
+                <Ionicons name="image-outline" size={36} color={colors.textMuted} />
+                <Text style={styles.coverPlaceholderText}>Tap to add a cover photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
         {/* Active program notice */}
         <View style={styles.notice}>
           <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
@@ -282,6 +328,30 @@ const styles = StyleSheet.create({
   backBtn: { padding: spacing.xs },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
+  coverPicker: {
+    height: 180,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  coverPreview: { width: '100%', height: '100%' },
+  coverEditBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+  },
+  coverEditText: { fontSize: typography.xs, color: '#fff', fontWeight: '600' },
+  coverPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  coverPlaceholderText: { fontSize: typography.sm, color: colors.textMuted },
   notice: {
     flexDirection: 'row',
     alignItems: 'flex-start',

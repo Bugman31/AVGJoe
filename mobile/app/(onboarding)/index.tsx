@@ -10,7 +10,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/lib/theme';
@@ -124,6 +124,8 @@ const PROGRAM_STYLES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEditMode = edit === '1';
   const { user, refreshUser } = useAuth();
   const {
     data,
@@ -139,14 +141,36 @@ export default function OnboardingScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
   useEffect(() => {
-    loadPartial();
+    if (isEditMode) {
+      // Pre-populate fields from existing profile
+      api.get<{ profile: Record<string, unknown> }>('/api/profile/me').then((res) => {
+        const p = res.profile;
+        if (p.primaryGoal) setField('primaryGoal', p.primaryGoal as string);
+        if (p.secondaryGoals) setField('secondaryGoals', JSON.parse(p.secondaryGoals as string));
+        if (p.experienceLevel) setField('experienceLevel', p.experienceLevel as string);
+        if (p.daysPerWeek) setField('daysPerWeek', p.daysPerWeek as number);
+        if (p.sessionDurationMins) setField('sessionDurationMins', p.sessionDurationMins as number);
+        if (p.preferredSplit) setField('preferredSplit', p.preferredSplit as string);
+        if (p.availableEquipment) setField('availableEquipment', JSON.parse(p.availableEquipment as string));
+        if (p.restrictions) setField('restrictions', JSON.parse(p.restrictions as string));
+        if (p.injuryFlags) setField('injuryFlags', JSON.parse(p.injuryFlags as string));
+        if (p.workoutEnvironment) setField('workoutEnvironment', p.workoutEnvironment as string);
+        if (p.priorityAreas) setField('priorityAreas', JSON.parse(p.priorityAreas as string));
+        if (p.programStyle) setField('programStyle', p.programStyle as string);
+        if (p.unitSystem) setField('unitSystem', p.unitSystem as string);
+        if (p.benchmarkSquat) setField('benchmarkSquat', p.benchmarkSquat as number);
+        if (p.benchmarkDeadlift) setField('benchmarkDeadlift', p.benchmarkDeadlift as number);
+        if (p.benchmarkBench) setField('benchmarkBench', p.benchmarkBench as number);
+      }).catch(() => {});
+    } else {
+      loadPartial();
+    }
   }, []);
 
-  // Auto-save on each step change
+  // Auto-save on each step change (not needed in edit mode)
   useEffect(() => {
-    savePartial();
+    if (!isEditMode) savePartial();
   }, [currentStep]);
 
   const toggleMulti = (field: keyof typeof data, value: string) => {
@@ -182,7 +206,11 @@ export default function OnboardingScreen() {
       await clearPartial();
       // Refresh user state to pick up onboardingCompleted: true
       await refreshUser();
-      router.replace('/(app)/home');
+      if (isEditMode) {
+        router.replace('/(app)/profile');
+      } else {
+        router.replace('/(app)/home');
+      }
     } catch (e) {
       Alert.alert('Error', (e as Error).message);
     } finally {

@@ -485,6 +485,163 @@ async function main() {
   if (seeded > 0) console.log(`✅ ${seeded} preloaded templates created`);
   if (updated > 0) console.log(`✅ ${updated} preloaded templates updated`);
   if (seeded === 0 && updated === 0) console.log('Preloaded templates already up to date');
+
+  // ─── Seed community (shared) programs ─────────────────────────────────────
+  //
+  // Creates demo coaches + their shared programs so the Browse screen
+  // has real content on a fresh database.  Idempotent by creatorEmail + name.
+
+  const DEMO_COACHES = [
+    {
+      email: 'coach.marcus@avgjoe.com',
+      name: 'Marcus J.',
+      avatarUrl: 'https://api.dicebear.com/9.x/personas/png?seed=marcus&size=128',
+    },
+    {
+      email: 'coach.sarah@avgjoe.com',
+      name: 'Sarah K.',
+      avatarUrl: 'https://api.dicebear.com/9.x/personas/png?seed=sarah&size=128',
+    },
+    {
+      email: 'coach.derek@avgjoe.com',
+      name: 'Derek L.',
+      avatarUrl: 'https://api.dicebear.com/9.x/personas/png?seed=derek&size=128',
+    },
+  ];
+
+  const DEMO_PROGRAMS = [
+    {
+      coachEmail: 'coach.marcus@avgjoe.com',
+      name: '12-Week Strength Foundation',
+      description:
+        'A no-fluff linear progression program built around the squat, bench, deadlift, and press. ' +
+        'Perfect for lifters who want to add real weight to the bar every session. ' +
+        'Includes detailed coaching notes, warmup protocols, and deload guidance.',
+      category: 'strength',
+      difficulty: 'beginner',
+      durationWeeks: 12,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
+      ratingAverage: 4.8,
+      enrollmentCount: 312,
+    },
+    {
+      coachEmail: 'coach.sarah@avgjoe.com',
+      name: 'Lean & Strong 8-Week',
+      description:
+        'Combines hypertrophy training with metabolic conditioning to build muscle and shed fat simultaneously. ' +
+        '4 days a week — upper/lower split with Friday finishers. ' +
+        'Moderate weights, shorter rest periods, high intensity.',
+      category: 'hypertrophy',
+      difficulty: 'intermediate',
+      durationWeeks: 8,
+      daysPerWeek: 4,
+      coverImageUrl: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80',
+      ratingAverage: 4.6,
+      enrollmentCount: 187,
+    },
+    {
+      coachEmail: 'coach.derek@avgjoe.com',
+      name: 'Push Pull Legs Power',
+      description:
+        'Classic PPL with a powerlifting twist — heavy compounds in the 3-6 rep range paired with ' +
+        'accessory work in the 8-12 rep range. 6 days a week for serious lifters. ' +
+        'Week 4 and week 8 are programmed deload weeks.',
+      category: 'powerlifting',
+      difficulty: 'advanced',
+      durationWeeks: 8,
+      daysPerWeek: 6,
+      coverImageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80',
+      ratingAverage: 4.9,
+      enrollmentCount: 94,
+    },
+    {
+      coachEmail: 'coach.sarah@avgjoe.com',
+      name: 'Beginner Full Body Kickstart',
+      description:
+        'Three full-body sessions per week covering every major muscle group. ' +
+        'Designed to teach movement patterns and build a strength base from scratch. ' +
+        'No experience required — just show up and follow the plan.',
+      category: 'general',
+      difficulty: 'beginner',
+      durationWeeks: 6,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&q=80',
+      ratingAverage: 4.7,
+      enrollmentCount: 521,
+    },
+  ];
+
+  // Upsert demo coaches
+  const coachMap = new Map<string, string>(); // email → id
+  for (const coach of DEMO_COACHES) {
+    let coachUser = await prisma.user.findUnique({ where: { email: coach.email } });
+    if (!coachUser) {
+      const passwordHash = await bcrypt.hash('Coach1234!', 12);
+      coachUser = await prisma.user.create({
+        data: {
+          email: coach.email,
+          passwordHash,
+          name: coach.name,
+          avatarUrl: coach.avatarUrl,
+        },
+      });
+      console.log(`✅ Demo coach created: ${coach.name}`);
+    } else if (!coachUser.avatarUrl) {
+      // Back-fill avatar if missing
+      coachUser = await prisma.user.update({
+        where: { id: coachUser.id },
+        data: { avatarUrl: coach.avatarUrl, name: coach.name },
+      });
+    }
+    coachMap.set(coach.email, coachUser.id);
+  }
+
+  // Upsert demo shared programs
+  let programsSeeded = 0;
+  for (const prog of DEMO_PROGRAMS) {
+    const creatorId = coachMap.get(prog.coachEmail)!;
+    const coach = DEMO_COACHES.find((c) => c.email === prog.coachEmail)!;
+    const existing = await prisma.sharedProgram.findFirst({
+      where: { creatorId, name: prog.name },
+    });
+    if (existing) {
+      await prisma.sharedProgram.update({
+        where: { id: existing.id },
+        data: {
+          description: prog.description,
+          coverImageUrl: prog.coverImageUrl,
+          creatorAvatar: coach.avatarUrl,
+          ratingAverage: prog.ratingAverage,
+          enrollmentCount: prog.enrollmentCount,
+        },
+      });
+      continue;
+    }
+    await prisma.sharedProgram.create({
+      data: {
+        creatorId,
+        creatorName: coach.name,
+        creatorAvatar: coach.avatarUrl,
+        coverImageUrl: prog.coverImageUrl,
+        name: prog.name,
+        description: prog.description,
+        category: prog.category,
+        difficulty: prog.difficulty,
+        durationWeeks: prog.durationWeeks,
+        daysPerWeek: prog.daysPerWeek,
+        ratingAverage: prog.ratingAverage,
+        enrollmentCount: prog.enrollmentCount,
+        equipment: '[]',
+        tags: '[]',
+        workoutPlan: '{}',
+        isPublished: true,
+      },
+    });
+    programsSeeded++;
+  }
+  if (programsSeeded > 0) console.log(`✅ ${programsSeeded} community programs seeded`);
+  else console.log('Community programs already up to date');
 }
 
 main()
