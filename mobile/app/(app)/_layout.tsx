@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { useTheme } from '@/context/ThemeContext';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -78,6 +79,8 @@ export default function AppLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+          headerShown: true,
+          header: () => <BrandHeader />,
         }}
       />
       <Tabs.Screen
@@ -85,6 +88,8 @@ export default function AppLayout() {
         options={{
           title: 'Workout',
           tabBarIcon: ({ focused }) => <TabIcon name="barbell" focused={focused} />,
+          headerShown: true,
+          header: () => <BrandHeader />,
         }}
       />
       <Tabs.Screen
@@ -92,6 +97,8 @@ export default function AppLayout() {
         options={{
           title: 'Progress',
           tabBarIcon: ({ focused }) => <TabIcon name="trending-up" focused={focused} />,
+          headerShown: true,
+          header: () => <BrandHeader />,
         }}
       />
       <Tabs.Screen
@@ -99,6 +106,8 @@ export default function AppLayout() {
         options={{
           title: 'Program',
           tabBarIcon: ({ focused }) => <TabIcon name="calendar" focused={focused} />,
+          headerShown: true,
+          header: () => <BrandHeader />,
         }}
       />
       <Tabs.Screen
@@ -106,6 +115,8 @@ export default function AppLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} />,
+          headerShown: true,
+          header: () => <BrandHeader />,
         }}
       />
       {/* Hidden routes — accessible from within screens, not tab bar */}

@@ -112,7 +112,7 @@ export default function ProgressScreen() {
   if (isLoading) return <Spinner fullScreen />;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <FlatList
         data={sessions}
         keyExtractor={(item) => item.id}
