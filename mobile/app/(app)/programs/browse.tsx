@@ -237,8 +237,8 @@ const styles = StyleSheet.create({
     fontSize: typography.md,
     color: colors.text,
   },
-  pillScroll: { paddingVertical: spacing.xs },
-  pillRow: { paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center' },
+  pillScroll: { height: 44, flexGrow: 0, flexShrink: 0 },
+  pillRow: { paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', height: 44 },
   pill: {
     height: 32,
     paddingHorizontal: spacing.md,
