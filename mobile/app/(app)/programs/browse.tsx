@@ -144,10 +144,10 @@ export default function ProgramBrowseScreen() {
 
       {/* Category pills */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow} style={styles.pillScroll}>
-        {CATEGORIES.map((cat) => (
+        {CATEGORIES.map((cat, i) => (
           <TouchableOpacity
             key={cat.value || 'all'}
-            style={[styles.pill, activeCategory === cat.value && styles.pillActive]}
+            style={[styles.pill, activeCategory === cat.value && styles.pillActive, i > 0 && styles.pillSpacing]}
             onPress={() => handleCategoryPress(cat)}
           >
             <Text style={[styles.pillText, activeCategory === cat.value && styles.pillTextActive]}>
@@ -159,10 +159,10 @@ export default function ProgramBrowseScreen() {
 
       {/* Difficulty pills */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow} style={styles.pillScroll}>
-        {DIFFICULTIES.map((diff) => (
+        {DIFFICULTIES.map((diff, i) => (
           <TouchableOpacity
             key={diff.value}
-            style={[styles.pill, activeDifficulty === diff.value && styles.pillActive]}
+            style={[styles.pill, activeDifficulty === diff.value && styles.pillActive, i > 0 && styles.pillSpacing]}
             onPress={() => handleDifficultyPress(diff)}
           >
             <Text style={[styles.pillText, activeDifficulty === diff.value && styles.pillTextActive]}>
@@ -238,15 +238,18 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   pillScroll: { paddingVertical: spacing.xs },
-  pillRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, flexDirection: 'row' },
+  pillRow: { paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center' },
   pill: {
+    height: 32,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  pillSpacing: { marginLeft: spacing.sm },
   pillActive: { borderColor: colors.accent, backgroundColor: colors.accentLight },
   pillText: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '500' },
   pillTextActive: { color: colors.accent },
