@@ -642,6 +642,30 @@ async function main() {
   }
   if (programsSeeded > 0) console.log(`✅ ${programsSeeded} community programs seeded`);
   else console.log('Community programs already up to date');
+
+  // Back-fill cover images for any shared programs that are missing one
+  const FALLBACK_COVERS = [
+    'https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=800&q=80', // barbell squat rack
+    'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=800&q=80', // gym floor dumbbells
+    'https://images.unsplash.com/photo-1574680178050-55c6a6a96e0a?w=800&q=80', // pull up bar
+    'https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=800&q=80', // running track athlete
+    'https://images.unsplash.com/photo-1544033527-b192daee1f5b?w=800&q=80', // kettlebell workout
+    'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=800&q=80', // gym machine row
+  ];
+  const missingCover = await prisma.sharedProgram.findMany({
+    where: { coverImageUrl: null },
+    select: { id: true },
+  });
+  let backfilled = 0;
+  for (let i = 0; i < missingCover.length; i++) {
+    const cover = FALLBACK_COVERS[i % FALLBACK_COVERS.length];
+    await prisma.sharedProgram.update({
+      where: { id: missingCover[i].id },
+      data: { coverImageUrl: cover },
+    });
+    backfilled++;
+  }
+  if (backfilled > 0) console.log(`✅ Back-filled cover images for ${backfilled} programs`);
 }
 
 main()
