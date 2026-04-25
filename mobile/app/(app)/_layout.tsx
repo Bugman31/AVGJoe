@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { useTheme } from '@/context/ThemeContext';
 import { BrandHeader } from '@/components/ui/BrandHeader';
+import { useWelcomeGate } from '@/hooks/useWelcomeGate';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -35,10 +36,12 @@ function FloatingTabBarBackground() {
 export default function AppLayout() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { colors, isDark } = useTheme();
+  const { isChecking, shouldShowWelcome } = useWelcomeGate();
 
-  if (isLoading) return <Spinner fullScreen />;
+  if (isLoading || isChecking) return <Spinner fullScreen />;
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
   if (user?.onboardingCompleted === false) return <Redirect href="/(onboarding)/" />;
+  if (shouldShowWelcome) return <Redirect href="/welcome" />;
 
   // Semi-transparent fallback for Android (BlurView less reliable there)
   const tabBarBg = Platform.OS === 'android'

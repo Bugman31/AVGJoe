@@ -392,7 +392,13 @@ function SetupStep({
         'Profile Incomplete',
         'Complete your training profile so the AI can tailor your program.',
         [
-          { text: 'Set Up Profile', onPress: () => router.push('/(onboarding)/') },
+          {
+            text: 'Set Up Profile',
+            onPress: () => router.push({
+              pathname: '/(onboarding)/',
+              params: { returnTo: '/(app)/workouts/build-program' },
+            }),
+          },
           { text: 'Cancel', style: 'cancel' },
         ]
       );
@@ -450,7 +456,12 @@ function SetupStep({
                   <Text style={s1.profileMissingText}>
                     Training profile not set up yet.
                   </Text>
-                  <TouchableOpacity onPress={() => router.push('/(onboarding)/')}>
+                  <TouchableOpacity
+                    onPress={() => router.push({
+                      pathname: '/(onboarding)/',
+                      params: { returnTo: '/(app)/workouts/build-program' },
+                    })}
+                  >
                     <Text style={s1.profileLink}>Set up your profile →</Text>
                   </TouchableOpacity>
                 </View>
@@ -459,7 +470,15 @@ function SetupStep({
               <View style={s1.profileBox}>
                 <View style={s1.profileHeader}>
                   <Text style={s1.profileLabel}>Your Training Profile</Text>
-                  <TouchableOpacity onPress={() => router.push('/(onboarding)/?edit=1')}>
+                  <TouchableOpacity
+                    onPress={() => router.push({
+                      pathname: '/(onboarding)/',
+                      params: {
+                        edit: '1',
+                        returnTo: '/(app)/workouts/build-program',
+                      },
+                    })}
+                  >
                     <Text style={s1.profileLink}>Edit →</Text>
                   </TouchableOpacity>
                 </View>

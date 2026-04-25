@@ -124,8 +124,13 @@ const PROGRAM_STYLES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const { edit, returnTo } = useLocalSearchParams<{ edit?: string; returnTo?: string }>();
   const isEditMode = edit === '1';
+  const resolvedReturnTo = typeof returnTo === 'string' && returnTo.length > 0
+    ? returnTo
+    : isEditMode
+      ? '/(app)/profile'
+      : '/(app)/home';
   const { user, refreshUser } = useAuth();
   const {
     data,
@@ -206,11 +211,7 @@ export default function OnboardingScreen() {
       await clearPartial();
       // Refresh user state to pick up onboardingCompleted: true
       await refreshUser();
-      if (isEditMode) {
-        router.replace('/(app)/profile');
-      } else {
-        router.replace('/(app)/home');
-      }
+      router.replace(resolvedReturnTo);
     } catch (e) {
       Alert.alert('Error', (e as Error).message);
     } finally {
@@ -406,7 +407,7 @@ export default function OnboardingScreen() {
             <View style={styles.backBtn} />
           )}
           <Text style={styles.headerTitle}>Average Joe's Workout Tracker</Text>
-          <TouchableOpacity onPress={() => router.replace('/(app)/profile')} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace(resolvedReturnTo)} style={styles.backBtn}>
             <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -436,7 +437,7 @@ export default function OnboardingScreen() {
               loading={isSubmitting}
               disabled={isSubmitting}
             >
-              Build My Program
+              {isEditMode || !!returnTo ? 'Save Training Profile' : 'Build My Program'}
             </Button>
           )}
         </View>

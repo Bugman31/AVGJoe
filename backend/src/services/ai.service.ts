@@ -489,11 +489,93 @@ const TRAINING_DAYS: Record<number, string[]> = {
   7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 };
 
-function selectTemplateNames(profile: OnboardingData): string[] {
-  const days = profile.daysPerWeek;
-  if (days <= 3) return ['Full Body A', 'Full Body B'];
-  if (days === 4) return ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'];
-  return ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Full Body A'];
+function formatPreferredSplit(split: string | undefined): string {
+  switch (split) {
+    case 'push_pull_legs':
+      return 'Push/Pull/Legs';
+    case 'upper_lower':
+      return 'Upper/Lower';
+    case 'full_body':
+      return 'Full Body';
+    case 'body_part':
+      return 'Body Part Split';
+    case 'athlete':
+      return 'Coach Selected';
+    default:
+      return 'Auto';
+  }
+}
+
+function resolveProgramStructure(profile: OnboardingData): { templateNames: string[]; splitName: string } {
+  const days = Math.min(Math.max(profile.daysPerWeek, 1), 7);
+
+  switch (profile.preferredSplit) {
+    case 'push_pull_legs': {
+      if (days >= 5) {
+        return {
+          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Push Day', 'Pull Day'].slice(0, days),
+          splitName: 'Push/Pull/Legs',
+        };
+      }
+      if (days === 4) {
+        return {
+          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'],
+          splitName: 'Push/Pull/Legs',
+        };
+      }
+      if (days === 3) {
+        return {
+          templateNames: ['Push Day', 'Pull Day', 'Leg Day'],
+          splitName: 'Push/Pull/Legs',
+        };
+      }
+      if (days === 2) {
+        return {
+          templateNames: ['Push Day', 'Pull Day'],
+          splitName: 'Push/Pull',
+        };
+      }
+      return { templateNames: ['Push Day'], splitName: 'Push Day' };
+    }
+    case 'upper_lower': {
+      return {
+        templateNames: Array.from({ length: days }, (_, idx) => (idx % 2 === 0 ? 'Upper Body' : 'Leg Day')),
+        splitName: 'Upper/Lower',
+      };
+    }
+    case 'full_body': {
+      return {
+        templateNames: Array.from({ length: days }, (_, idx) => (idx % 2 === 0 ? 'Full Body A' : 'Full Body B')),
+        splitName: 'Full Body',
+      };
+    }
+    case 'body_part': {
+      const bodyPartTemplates = ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Push Day', 'Pull Day', 'Leg Day'];
+      return {
+        templateNames: bodyPartTemplates.slice(0, days),
+        splitName: 'Body Part Split',
+      };
+    }
+    case 'athlete':
+    default: {
+      if (days <= 3) {
+        return {
+          templateNames: ['Full Body A', 'Full Body B', 'Full Body A'].slice(0, days),
+          splitName: 'Full Body',
+        };
+      }
+      if (days === 4) {
+        return {
+          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'],
+          splitName: 'PPL + Upper',
+        };
+      }
+      return {
+        templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Full Body A', 'Push Day', 'Pull Day'].slice(0, days),
+        splitName: 'Push/Pull/Legs',
+      };
+    }
+  }
 }
 
 type TemplateRow = Awaited<ReturnType<typeof prisma.workoutTemplate.findFirst>> & {
@@ -586,8 +668,8 @@ export async function generateProgram(userId: string, customization?: string): P
     unitSystem: profileRow.unitSystem,
   };
 
-  // Load preloaded seed templates matching the user's schedule
-  const templateNames = selectTemplateNames(profile);
+  // Load preloaded seed templates matching the user's preferred split and schedule
+  const { templateNames, splitName } = resolveProgramStructure(profile);
   const rawTemplates = await prisma.workoutTemplate.findMany({
     where: { source: 'preloaded', name: { in: templateNames } },
     include: {
@@ -615,6 +697,7 @@ export async function generateProgram(userId: string, customization?: string): P
     `Level: ${profile.experienceLevel}`,
     `Days: ${profile.daysPerWeek}/week`,
     `Duration: ${profile.sessionDurationMins} min`,
+    `Preferred Split: ${formatPreferredSplit(profile.preferredSplit)}`,
     `Equipment: ${profile.availableEquipment.join(', ') || 'full gym'}`,
     `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
   ].join(', ');
@@ -676,8 +759,6 @@ Only include exerciseSwaps if equipment or restrictions require it. Provide one 
       workouts.push(templateToWorkout(modifiedTemplate, week, day, noteMap.get(template.name) ?? ''));
     });
   }
-
-  const splitName = profile.daysPerWeek <= 3 ? 'Full Body' : profile.daysPerWeek === 4 ? 'PPL + Upper' : 'Push/Pull/Legs';
 
   return {
     programName: aiCustom.programName,
