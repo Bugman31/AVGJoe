@@ -299,12 +299,63 @@ export async function getProgressByName(
 
 export async function getLoggedExerciseNames(userId: string): Promise<string[]> {
   const sets = await prisma.sessionSet.findMany({
-    where: { session: { userId }, actualWeight: { not: null } },
+    where: { session: { userId } },
     select: { exerciseName: true },
     distinct: ['exerciseName'],
     orderBy: { exerciseName: 'asc' },
   });
   return sets.map((s) => s.exerciseName);
+}
+
+export interface ExerciseHistorySet {
+  setNumber: number;
+  actualReps: number | null;
+  actualWeight: number | null;
+  unit: string;
+}
+
+export interface ExerciseHistoryEntry {
+  sessionId: string;
+  sessionName: string;
+  completedAt: string;
+  sets: ExerciseHistorySet[];
+}
+
+export async function getExerciseHistory(
+  exerciseName: string,
+  userId: string
+): Promise<ExerciseHistoryEntry[]> {
+  const sessions = await prisma.workoutSession.findMany({
+    where: {
+      userId,
+      completedAt: { not: null },
+      sets: { some: { exerciseName } },
+    },
+    orderBy: { completedAt: 'desc' },
+    take: 30,
+    select: {
+      id: true,
+      name: true,
+      completedAt: true,
+      sets: {
+        where: { exerciseName },
+        orderBy: { setNumber: 'asc' },
+        select: {
+          setNumber: true,
+          actualReps: true,
+          actualWeight: true,
+          unit: true,
+        },
+      },
+    },
+  });
+
+  return sessions.map((s) => ({
+    sessionId: s.id,
+    sessionName: s.name,
+    completedAt: s.completedAt!.toISOString(),
+    sets: s.sets,
+  }));
 }
 
 export async function getProgress(

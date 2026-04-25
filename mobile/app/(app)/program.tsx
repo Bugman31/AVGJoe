@@ -8,10 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +15,6 @@ import { useFocusEffect } from 'expo-router';
 import { theme, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { useProgram } from '@/hooks/useProgram';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
 import { useSession } from '@/hooks/useSession';
 import { useRouter } from 'expo-router';
@@ -30,24 +25,20 @@ const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 export default function ProgramScreen() {
   const { user, refreshUser } = useAuth();
 
-  // Refresh user on every visit so hasAnthropicKey/hasOpenAiKey is always current
+  // Refresh user and active program on every visit
   useFocusEffect(
     useCallback(() => {
       refreshUser().catch(() => {});
-    }, [refreshUser])
+      reload();
+    }, [refreshUser, reload])
   );
   const router = useRouter();
-  const { generateProgram, isGenerating, error } = useProgram();
   const { program, isLoading, reload, currentWeekWorkouts } = useActiveProgram();
   const { startProgramWorkout } = useSession();
   const [analyses, setAnalyses] = useState<WeeklyAnalysis[]>([]);
   const [analyzingWeek, setAnalyzingWeek] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWorkoutId, setStartingWorkoutId] = useState<string | null>(null);
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [customization, setCustomization] = useState('');
-  // undefined = not yet fetched, null = fetch failed/no profile, object = loaded
-  const [trainingProfile, setTrainingProfile] = useState<Record<string, unknown> | null | undefined>(undefined);
 
   const handleStartWorkout = async (plannedWorkout: PlannedWorkout) => {
     if (!program) return;
@@ -61,8 +52,6 @@ export default function ProgramScreen() {
       setStartingWorkoutId(null);
     }
   };
-
-  const hasAiProvider = !!(user?.serverHasAiKey || user?.hasAnthropicKey || user?.hasOpenAiKey);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -82,44 +71,6 @@ export default function ProgramScreen() {
       const res = await api.get<{ analyses: WeeklyAnalysis[] }>(`/api/analysis/programs/${program.id}`);
       setAnalyses(res.analyses);
     } catch {}
-  };
-
-  const handleGenerate = () => {
-    setCustomization('');
-    setTrainingProfile(undefined); // reset to loading state
-    setShowGenerateModal(true);
-    // Fetch training profile for review in the modal
-    api.get<{ profile: Record<string, unknown> }>('/api/profile/me')
-      .then((res) => setTrainingProfile(res.profile ?? null))
-      .catch(() => setTrainingProfile(null));
-  };
-
-  function formatGoalLabel(val: string | undefined): string {
-    if (!val) return 'Not set';
-    return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  function buildProfileSummary(): string | null {
-    if (!trainingProfile) return null;
-    const p = trainingProfile;
-    const lines: string[] = [];
-    if (p.primaryGoal) lines.push(`Goal: ${formatGoalLabel(p.primaryGoal as string)}`);
-    if (p.experienceLevel) lines.push(`Level: ${formatGoalLabel(p.experienceLevel as string)}`);
-    if (p.daysPerWeek) lines.push(`${p.daysPerWeek} days/week`);
-    if (p.sessionDurationMins) lines.push(`${p.sessionDurationMins} min sessions`);
-    if (p.preferredSplit) lines.push(`Split: ${formatGoalLabel(p.preferredSplit as string)}`);
-    if (p.workoutEnvironment) lines.push(`Env: ${formatGoalLabel(p.workoutEnvironment as string)}`);
-    return lines.length > 0 ? lines.join('  ·  ') : null;
-  }
-
-  const confirmGenerate = async () => {
-    setShowGenerateModal(false);
-    try {
-      await generateProgram(customization.trim() || undefined);
-      await reload();
-    } catch (e) {
-      Alert.alert('Error', (e as Error).message);
-    }
   };
 
   const handleAnalyzeWeek = async () => {
@@ -170,14 +121,10 @@ export default function ProgramScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.generateBtn}
-              onPress={handleGenerate}
-              disabled={isGenerating}
+              onPress={() => router.push('/(app)/workouts/build-program')}
             >
-              {isGenerating
-                ? <ActivityIndicator size="small" color={theme.colors.primary} />
-                : <><Ionicons name="sparkles" size={16} color={theme.colors.primary} />
-                  <Text style={styles.generateBtnText}>Generate</Text></>
-              }
+              <Ionicons name="construct-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.generateBtnText}>Build</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -188,11 +135,18 @@ export default function ProgramScreen() {
             <Ionicons name="calendar-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
             <Text style={styles.emptyTitle}>No active program</Text>
             <Text style={styles.emptySubtitle}>Generate a personalized AI program or pick one from the community.</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={handleGenerate} disabled={isGenerating}>
-              {isGenerating
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.emptyBtnText}>Generate My Program</Text>
-              }
+            <TouchableOpacity
+              style={styles.emptyBtn}
+              onPress={() => router.push('/(app)/workouts/build-program')}
+            >
+              <Text style={styles.emptyBtnText}>Build My Program</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.emptyBrowseBtn}
+              onPress={() => router.push('/(app)/workouts/build-program')}
+            >
+              <Ionicons name="construct-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.emptyBrowseBtnText}>Build My Own Program</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.emptyBrowseBtn}
@@ -315,83 +269,6 @@ export default function ProgramScreen() {
         )}
       </ScrollView>
 
-      {/* Generate Program Modal */}
-      <Modal visible={showGenerateModal} transparent animationType="slide">
-        <View style={styles.genOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.genCard}>
-              <Text style={styles.genTitle}>Generate My Program</Text>
-              <Text style={styles.genSubtitle}>
-                AI will build a 4-week program from your profile using proven templates.
-                {program ? ' Your current program will be archived.' : ''}
-              </Text>
-
-              {/* Training profile summary */}
-              {trainingProfile === undefined ? (
-                // Loading
-                <View style={styles.genProfile}>
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                </View>
-              ) : trainingProfile === null ? (
-                // Failed / no profile set
-                <View style={styles.genProfileEmpty}>
-                  <Ionicons name="person-outline" size={14} color={theme.colors.textMuted} />
-                  <Text style={styles.genProfileEmptyText}>
-                    No training profile yet.{' '}
-                    <Text style={styles.genProfileEdit} onPress={() => { setShowGenerateModal(false); router.push('/(onboarding)/'); }}>
-                      Set yours →
-                    </Text>
-                  </Text>
-                </View>
-              ) : (
-                // Loaded
-                <View style={styles.genProfile}>
-                  <View style={styles.genProfileHeader}>
-                    <Text style={styles.genProfileLabel}>Your Training Profile</Text>
-                    <TouchableOpacity onPress={() => { setShowGenerateModal(false); router.push('/(onboarding)/?edit=1'); }}>
-                      <Text style={styles.genProfileEdit}>Edit →</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.genProfileText}>{buildProfileSummary() ?? 'Profile incomplete — tap Edit to fill it in.'}</Text>
-                </View>
-              )}
-
-              {!hasAiProvider && (
-                <TouchableOpacity
-                  style={styles.genKeyWarning}
-                  onPress={() => { setShowGenerateModal(false); router.push('/(app)/profile'); }}
-                >
-                  <Ionicons name="key-outline" size={14} color={theme.colors.warning} />
-                  <Text style={styles.genKeyWarningText}>
-                    No AI key detected — tap to add one in Profile, or it will use the server key if available.
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <Text style={styles.genInputLabel}>Customization (optional)</Text>
-              <TextInput
-                style={styles.genInput}
-                placeholder="e.g. I have a bad shoulder, prefer dumbbells, want more cardio…"
-                placeholderTextColor={theme.colors.textMuted}
-                value={customization}
-                onChangeText={setCustomization}
-                multiline
-                numberOfLines={3}
-              />
-
-              <View style={styles.genButtons}>
-                <TouchableOpacity style={styles.genCancel} onPress={() => setShowGenerateModal(false)}>
-                  <Text style={styles.genCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.genConfirm} onPress={confirmGenerate}>
-                  <Ionicons name="sparkles" size={16} color="#fff" />
-                  <Text style={styles.genConfirmText}>Generate</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -531,6 +408,8 @@ const styles = StyleSheet.create({
   genCancelText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: '600' },
   genConfirm: { flex: 2, flexDirection: 'row', gap: 6, backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   genConfirmText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  genReplaceWarning: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: theme.colors.bg, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: theme.colors.warning + '50' },
+  genReplaceWarningText: { flex: 1, fontSize: 13, color: theme.colors.warning, lineHeight: 18 },
   genKeyWarning: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: theme.colors.bg, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: theme.colors.warning + '40' },
   genKeyWarningText: { flex: 1, fontSize: 12, color: theme.colors.warning, lineHeight: 17 },
 });

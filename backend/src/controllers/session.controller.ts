@@ -171,3 +171,17 @@ export async function getLoggedExerciseNames(
     next(err);
   }
 }
+
+export async function getExerciseHistory(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const exerciseName = decodeURIComponent(req.params.exerciseName);
+    const history = await sessionService.getExerciseHistory(exerciseName, req.user.id);
+    res.json({ history, exerciseName });
+  } catch (err) {
+    next(err);
+  }
+}

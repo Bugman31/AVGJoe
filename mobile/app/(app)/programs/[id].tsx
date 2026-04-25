@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveProgram } from '@/hooks/useActiveProgram';
 import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { SharedProgram } from '@/types';
 
@@ -22,6 +23,7 @@ export default function ProgramDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { program: activeProgram } = useActiveProgram();
 
   const [program, setProgram] = useState<SharedProgram | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +47,7 @@ export default function ProgramDetailScreen() {
     if (id) fetchProgram();
   }, [id]);
 
-  async function handleEnroll() {
+  async function doEnroll() {
     if (!id) return;
     setIsEnrolling(true);
     try {
@@ -60,6 +62,22 @@ export default function ProgramDetailScreen() {
       });
     } finally {
       setIsEnrolling(false);
+    }
+  }
+
+  function handleEnroll() {
+    if (!id) return;
+    if (activeProgram) {
+      Alert.alert(
+        'Replace Current Program?',
+        `You're enrolled in "${activeProgram.name}". Starting this program will archive it. Your workout history is preserved.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: doEnroll },
+        ]
+      );
+    } else {
+      doEnroll();
     }
   }
 

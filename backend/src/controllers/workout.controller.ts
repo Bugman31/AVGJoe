@@ -20,7 +20,7 @@ const createTemplateSchema = z.object({
   name: z.string().min(1, 'Template name is required').max(200),
   description: z.string().max(1000).nullable().optional(),
   weekNumber: z.number().int().min(1).max(52).nullable().optional(),
-  dayOfWeek: z.string().max(20).nullable().optional(),
+  dayOfWeek: z.string().max(100).nullable().optional(),
   exercises: z.array(exerciseSchema).min(1, 'At least one exercise is required'),
 });
 
@@ -28,7 +28,7 @@ const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
   weekNumber: z.number().int().min(1).max(52).nullable().optional(),
-  dayOfWeek: z.string().max(20).nullable().optional(),
+  dayOfWeek: z.string().max(100).nullable().optional(),
   exercises: z.array(exerciseSchema).optional(),
 });
 

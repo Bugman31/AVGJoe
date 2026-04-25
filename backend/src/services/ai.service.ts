@@ -16,6 +16,12 @@ interface GenerateWorkoutData {
   fitnessLevel?: string;
   daysPerWeek?: number;
   equipment?: string;
+  preferredSplit?: string;
+  benchmarkBench?: number;
+  benchmarkSquat?: number;
+  benchmarkDeadlift?: number;
+  benchmarkPress?: number;
+  unitSystem?: string;
 }
 
 interface AiExerciseSet {
@@ -166,7 +172,8 @@ When creating programs:
 - Scale intensity to the user's fitness level
 - Include appropriate notes for each exercise (form cues, warm-up considerations)
 - Use evidence-based rep/set schemes (e.g. 3-5 sets, 5-15 reps)
-- Vary the movements across days (push/pull/legs, upper/lower, or full-body splits)
+- STRICTLY follow the user's preferred training split — if they specify Push/Pull/Legs, every workout day must be labelled and structured as a push, pull, or leg day with only appropriate exercises for that focus. If they specify Upper/Lower, alternate upper and lower body days. Never substitute a different split than what was requested.
+- If the user provides strength benchmarks (bench press, squat, deadlift, overhead press), use those numbers to set realistic targetWeight values for exercises. Working sets should generally be 65-85% of their 1RM. Use the same unit system (lbs or kg) the user specified.
 
 You must ALWAYS respond with valid JSON matching this exact schema — no text outside the JSON:
 {
@@ -203,10 +210,24 @@ Do not include any text outside the JSON object. Do not use markdown code blocks
 }
 
 function buildUserPrompt(data: GenerateWorkoutData): string {
+  const unit = data.unitSystem ?? 'lbs';
   const parts = [`Create a complete multi-week workout program for: ${data.goal}`];
   if (data.fitnessLevel) parts.push(`Fitness level: ${data.fitnessLevel}`);
   if (data.daysPerWeek) parts.push(`Training days per week: ${data.daysPerWeek}`);
+  if (data.preferredSplit) parts.push(`Training split (REQUIRED — do not change this): ${data.preferredSplit}`);
   if (data.equipment) parts.push(`Available equipment: ${data.equipment}`);
+  parts.push(`Weight unit: ${unit}`);
+
+  const hasBenchmarks = data.benchmarkBench || data.benchmarkSquat || data.benchmarkDeadlift || data.benchmarkPress;
+  if (hasBenchmarks) {
+    parts.push('Athlete strength benchmarks (use these to set targetWeight for exercises):');
+    if (data.benchmarkBench) parts.push(`  Bench press 1RM: ${data.benchmarkBench} ${unit}`);
+    if (data.benchmarkSquat) parts.push(`  Squat 1RM: ${data.benchmarkSquat} ${unit}`);
+    if (data.benchmarkDeadlift) parts.push(`  Deadlift 1RM: ${data.benchmarkDeadlift} ${unit}`);
+    if (data.benchmarkPress) parts.push(`  Overhead press 1RM: ${data.benchmarkPress} ${unit}`);
+    parts.push(`Set working weights at 65-85% of the relevant 1RM. For accessory exercises without a direct benchmark, estimate based on the athlete's overall strength level.`);
+  }
+
   parts.push('Generate a 4-week progressive program. Return ONLY the JSON object — no markdown, no explanation.');
   return parts.join('\n');
 }

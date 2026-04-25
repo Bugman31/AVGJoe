@@ -36,5 +36,6 @@ const programRateLimiter = rateLimit({
 
 router.post('/generate', authMiddleware, aiRateLimiter, aiController.generate);
 router.post('/generate-program', authMiddleware, programRateLimiter, aiController.generateProgram);
+router.post('/preview-program', authMiddleware, programRateLimiter, aiController.previewProgram);
 
 export default router;

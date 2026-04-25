@@ -19,12 +19,20 @@ import { colors, spacing, typography } from '@/lib/theme';
 
 const FITNESS_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 const DAYS_OPTIONS = [2, 3, 4, 5, 6];
+const SPLIT_OPTIONS = ['Push/Pull/Legs', 'Upper/Lower', 'Full Body', 'Bro Split', 'Custom'];
+const UNIT_OPTIONS: Array<'lbs' | 'kg'> = ['lbs', 'kg'];
 
 export default function AiScreen() {
   const [goal, setGoal] = useState('');
   const [fitnessLevel, setFitnessLevel] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState<number | undefined>();
   const [equipment, setEquipment] = useState('');
+  const [preferredSplit, setPreferredSplit] = useState('');
+  const [unitSystem, setUnitSystem] = useState<'lbs' | 'kg'>('lbs');
+  const [benchmarkBench, setBenchmarkBench] = useState('');
+  const [benchmarkSquat, setBenchmarkSquat] = useState('');
+  const [benchmarkDeadlift, setBenchmarkDeadlift] = useState('');
+  const [benchmarkPress, setBenchmarkPress] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [program, setProgram] = useState<AiProgram | null>(null);
 
@@ -41,6 +49,12 @@ export default function AiScreen() {
         fitnessLevel: fitnessLevel || undefined,
         daysPerWeek,
         equipment: equipment.trim() || undefined,
+        preferredSplit: preferredSplit || undefined,
+        unitSystem,
+        benchmarkBench: benchmarkBench ? Number(benchmarkBench) : undefined,
+        benchmarkSquat: benchmarkSquat ? Number(benchmarkSquat) : undefined,
+        benchmarkDeadlift: benchmarkDeadlift ? Number(benchmarkDeadlift) : undefined,
+        benchmarkPress: benchmarkPress ? Number(benchmarkPress) : undefined,
       };
       const response = await api.post<{ program: AiProgram }>('/api/ai/generate', body);
       setProgram(response.program);
@@ -114,6 +128,84 @@ export default function AiScreen() {
               testID="equipment-input"
             />
 
+            <Text style={styles.fieldLabel}>Training Split (optional)</Text>
+            <View style={styles.chipRow}>
+              {SPLIT_OPTIONS.map((split) => (
+                <Button
+                  key={split}
+                  onPress={() => setPreferredSplit(preferredSplit === split ? '' : split)}
+                  variant={preferredSplit === split ? 'primary' : 'secondary'}
+                  size="sm"
+                  testID={`split-${split.toLowerCase().replace(/\//g, '-')}`}
+                >
+                  {split}
+                </Button>
+              ))}
+            </View>
+
+            <Text style={styles.sectionHeader}>Strength Benchmarks (optional)</Text>
+            <Text style={styles.sectionSubtext}>Enter your 1-rep max so the AI can recommend working weights</Text>
+
+            <Text style={styles.fieldLabel}>Weight Unit</Text>
+            <View style={styles.chipRow}>
+              {UNIT_OPTIONS.map((u) => (
+                <Button
+                  key={u}
+                  onPress={() => setUnitSystem(u)}
+                  variant={unitSystem === u ? 'primary' : 'secondary'}
+                  size="sm"
+                  testID={`unit-${u}`}
+                >
+                  {u}
+                </Button>
+              ))}
+            </View>
+
+            <View style={styles.benchmarkRow}>
+              <View style={styles.benchmarkField}>
+                <Input
+                  label={`Bench (${unitSystem})`}
+                  value={benchmarkBench}
+                  onChangeText={setBenchmarkBench}
+                  placeholder="e.g. 185"
+                  keyboardType="numeric"
+                  testID="bench-input"
+                />
+              </View>
+              <View style={styles.benchmarkField}>
+                <Input
+                  label={`Squat (${unitSystem})`}
+                  value={benchmarkSquat}
+                  onChangeText={setBenchmarkSquat}
+                  placeholder="e.g. 225"
+                  keyboardType="numeric"
+                  testID="squat-input"
+                />
+              </View>
+            </View>
+            <View style={styles.benchmarkRow}>
+              <View style={styles.benchmarkField}>
+                <Input
+                  label={`Deadlift (${unitSystem})`}
+                  value={benchmarkDeadlift}
+                  onChangeText={setBenchmarkDeadlift}
+                  placeholder="e.g. 275"
+                  keyboardType="numeric"
+                  testID="deadlift-input"
+                />
+              </View>
+              <View style={styles.benchmarkField}>
+                <Input
+                  label={`OHP (${unitSystem})`}
+                  value={benchmarkPress}
+                  onChangeText={setBenchmarkPress}
+                  placeholder="e.g. 115"
+                  keyboardType="numeric"
+                  testID="press-input"
+                />
+              </View>
+            </View>
+
             <Button
               onPress={handleGenerate}
               loading={isLoading}
@@ -159,4 +251,18 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   generateBtn: { marginTop: spacing.lg },
   resultTitle: { fontSize: typography.xl, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
+  sectionHeader: {
+    fontSize: typography.sm,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: 2,
+  },
+  sectionSubtext: {
+    fontSize: typography.xs,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  benchmarkRow: { flexDirection: 'row', gap: spacing.sm },
+  benchmarkField: { flex: 1 },
 });

@@ -36,7 +36,34 @@ import { theme } from '@/lib/theme';
 import { saveWorkout } from '@/lib/healthkit';
 import { useRestTimer, REST_TIMER_OPTIONS, type RestTimerDuration } from '@/hooks/useRestTimer';
 import { useSetCompleteSound } from '@/hooks/useSetCompleteSound';
-import type { WorkoutSession, PlannedWorkout, PlannedExercise, WorkoutSummary } from '@/types';
+import type { WorkoutSession, PlannedWorkout, PlannedExercise, PlannedExerciseSet, WorkoutSummary, UserProfile } from '@/types';
+
+/** Resolve a % prescription to an actual suggested weight using profile benchmarks */
+function calcSuggestedWeight(set: PlannedExerciseSet, profile: UserProfile | null): number | null {
+  if (!set.percentOfMax) return null;
+  let orm: number | null = null;
+  if (set.percentBasis === 'bench')     orm = profile?.benchmarkBench     ?? null;
+  else if (set.percentBasis === 'squat')    orm = profile?.benchmarkSquat    ?? null;
+  else if (set.percentBasis === 'deadlift') orm = profile?.benchmarkDeadlift ?? null;
+  else if (set.percentBasis === 'press')    orm = profile?.benchmarkPress    ?? null;
+  else if (set.percentBasis === 'custom')   orm = set.customOneRepMax        ?? null;
+  if (!orm) return null;
+  return Math.round(orm * set.percentOfMax / 100);
+}
+
+/** Format a set's Target column: shows "75% → 185" for % prescriptions, or "8r @7" for normal */
+function formatTarget(set: PlannedExerciseSet, profile: UserProfile | null): string {
+  if (set.percentOfMax) {
+    const suggested = calcSuggestedWeight(set, profile);
+    return suggested
+      ? `${set.percentOfMax}% → ${suggested}${set.unit || 'lb'}`
+      : `${set.percentOfMax}%`;
+  }
+  const parts: string[] = [];
+  if (set.targetReps) parts.push(`${set.targetReps}r`);
+  if (set.rpeTarget)  parts.push(`@${set.rpeTarget}`);
+  return parts.join(' ');
+}
 
 interface SetState {
   actualReps: string;
@@ -70,6 +97,9 @@ export default function ActiveWorkoutScreen() {
 
   // Previous session data keyed by exercise name
   const [lastSessionData, setLastSessionData] = useState<Record<string, LastSetData[]>>({});
+
+  // User profile (for % weight calculations)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Pre/post energy + soreness
   const [preEnergy, setPreEnergy] = useState<number | null>(null);
@@ -107,7 +137,14 @@ export default function ActiveWorkoutScreen() {
   useEffect(() => {
     async function init() {
       try {
-        const sessionRes = await api.get<{ session: WorkoutSession }>(`/api/sessions/${sessionId}`);
+        // Fetch session and profile in parallel
+        const [sessionRes, profileRes] = await Promise.all([
+          api.get<{ session: WorkoutSession }>(`/api/sessions/${sessionId}`),
+          api.get<{ profile: UserProfile }>('/api/profile/me').catch(() => ({ profile: null })),
+        ]);
+
+        const profile = profileRes.profile ?? null;
+        setUserProfile(profile);
         setSession(sessionRes.session);
 
         if (sessionRes.session.plannedWorkoutId && sessionRes.session.programId) {
@@ -117,7 +154,7 @@ export default function ActiveWorkoutScreen() {
           );
           if (pw) {
             setPlannedWorkout(pw);
-            initSetStates(pw.exercises);
+            initSetStates(pw.exercises, profile);
             // Load previous session data for each unique exercise
             loadLastSessionData(pw.exercises, sessionId);
           }
@@ -152,11 +189,17 @@ export default function ActiveWorkoutScreen() {
     setLastSessionData(map);
   }
 
-  function initSetStates(exercises: PlannedExercise[]) {
+  function initSetStates(exercises: PlannedExercise[], profile: UserProfile | null) {
     const states: Record<string, SetState> = {};
     exercises.forEach((ex, ei) => {
       ex.sets.forEach((s) => {
-        states[`${ei}-${s.setNumber}`] = { actualReps: '', actualWeight: '', rpe: null, logged: false };
+        const suggested = calcSuggestedWeight(s, profile);
+        states[`${ei}-${s.setNumber}`] = {
+          actualReps: '',
+          actualWeight: suggested ? String(suggested) : '',
+          rpe: null,
+          logged: false,
+        };
       });
     });
     setSetStates(states);
@@ -369,8 +412,7 @@ export default function ActiveWorkoutScreen() {
                         <View key={set.setNumber} style={[styles.setRow, state.logged && styles.setRowDone]}>
                           <Text style={[styles.colSet, styles.setNum]}>{set.setNumber}</Text>
                           <Text style={[styles.colTarget, styles.setTarget]}>
-                            {set.targetReps ? `${set.targetReps}r` : ''}
-                            {set.rpeTarget ? ` @${set.rpeTarget}` : ''}
+                            {formatTarget(set, userProfile)}
                           </Text>
                           <TextInput
                             style={[styles.inlineInput, styles.colInput, state.logged && styles.inlineInputDone]}

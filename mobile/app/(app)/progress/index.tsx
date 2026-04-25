@@ -33,6 +33,34 @@ interface ProgressPoint {
   isPR: boolean;
 }
 
+interface ExerciseHistorySet {
+  setNumber: number;
+  actualReps: number | null;
+  actualWeight: number | null;
+  unit: string;
+}
+
+interface ExerciseHistoryEntry {
+  sessionId: string;
+  sessionName: string;
+  completedAt: string;
+  sets: ExerciseHistorySet[];
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatSet(set: ExerciseHistorySet): string {
+  const reps = set.actualReps != null ? `${set.actualReps} reps` : null;
+  const weight = set.actualWeight != null ? `${set.actualWeight} ${set.unit ?? 'lbs'}` : null;
+  if (reps && weight) return `${reps} × ${weight}`;
+  if (reps) return reps;
+  if (weight) return weight;
+  return '—';
+}
+
 export default function ProgressScreen() {
   const [sessions, setSessions] = useState<SessionWithScores[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,12 +68,13 @@ export default function ProgressScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  // Exercise chart state
+  // Exercise search state
   const [loggedExercises, setLoggedExercises] = useState<string[]>([]);
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
-  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [historyData, setHistoryData] = useState<ExerciseHistoryEntry[]>([]);
+  const [isLoadingExercise, setIsLoadingExercise] = useState(false);
 
   async function loadSessions() {
     try {
@@ -68,17 +97,28 @@ export default function ProgressScreen() {
     }
   }
 
-  async function loadChartData(name: string) {
-    setIsLoadingChart(true);
+  async function loadExerciseData(name: string) {
+    setIsLoadingExercise(true);
+    setChartData([]);
+    setHistoryData([]);
     try {
-      const res = await api.get<{ progress: ProgressPoint[] }>(
-        `/api/sessions/progress-by-name/${encodeURIComponent(name)}?weeks=16`
+      const [chartRes, historyRes] = await Promise.all([
+        api.get<{ progress: ProgressPoint[] }>(
+          `/api/sessions/progress-by-name/${encodeURIComponent(name)}?weeks=16`
+        ),
+        api.get<{ history: ExerciseHistoryEntry[] }>(
+          `/api/sessions/exercise-history/${encodeURIComponent(name)}`
+        ),
+      ]);
+      setChartData(
+        chartRes.progress.map((p) => ({ date: p.date, maxWeight: p.maxWeight, isPR: p.isPR }))
       );
-      setChartData(res.progress.map((p) => ({ date: p.date, maxWeight: p.maxWeight, isPR: p.isPR })));
+      setHistoryData(historyRes.history);
     } catch {
       setChartData([]);
+      setHistoryData([]);
     } finally {
-      setIsLoadingChart(false);
+      setIsLoadingExercise(false);
     }
   }
 
@@ -90,36 +130,52 @@ export default function ProgressScreen() {
   const selectExercise = useCallback((name: string) => {
     setSelectedExercise(name);
     setExerciseSearch('');
-    loadChartData(name);
+    loadExerciseData(name);
+  }, []);
+
+  const clearExercise = useCallback(() => {
+    setSelectedExercise(null);
+    setChartData([]);
+    setHistoryData([]);
   }, []);
 
   const completedSessions = sessions.filter((s) => s.completedAt);
   const totalVolume = completedSessions.length;
-  const avgCompletion = completedSessions.length > 0
-    ? Math.round(completedSessions.reduce((sum, s) => sum + (s.completionScore ?? 75), 0) / completedSessions.length)
-    : 0;
-  const avgPerformance = completedSessions.length > 0
-    ? Math.round(completedSessions.reduce((sum, s) => sum + (s.performanceScore ?? 70), 0) / completedSessions.length)
-    : 0;
+  const avgCompletion =
+    completedSessions.length > 0
+      ? Math.round(
+          completedSessions.reduce((sum, s) => sum + (s.completionScore ?? 75), 0) /
+            completedSessions.length
+        )
+      : 0;
+  const avgPerformance =
+    completedSessions.length > 0
+      ? Math.round(
+          completedSessions.reduce((sum, s) => sum + (s.performanceScore ?? 70), 0) /
+            completedSessions.length
+        )
+      : 0;
 
   const filteredExercises = exerciseSearch.trim()
     ? loggedExercises.filter((e) => e.toLowerCase().includes(exerciseSearch.toLowerCase()))
     : loggedExercises;
 
-  // PR count
   const prCount = chartData.filter((p) => p.isPR).length;
 
   if (isLoading) return <Spinner fullScreen />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <FlatList
         data={sessions}
         keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); loadSessions(); }}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadSessions();
+            }}
             tintColor={theme.colors.primary}
           />
         }
@@ -136,10 +192,11 @@ export default function ProgressScreen() {
               </View>
             )}
 
-            {/* Strength chart section */}
-            <Text style={styles.sectionTitle}>Strength Chart</Text>
+            {/* Exercise lookup */}
+            <Text style={styles.sectionTitle}>Exercise History</Text>
             <View style={styles.chartCard}>
-              {/* Exercise search */}
+
+              {/* ── Search / picker state ── */}
               {!selectedExercise ? (
                 <>
                   <View style={styles.searchRow}>
@@ -150,15 +207,26 @@ export default function ProgressScreen() {
                       onChangeText={setExerciseSearch}
                       placeholder="Search an exercise…"
                       placeholderTextColor={theme.colors.textMuted}
+                      autoCorrect={false}
                     />
+                    {exerciseSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => setExerciseSearch('')}>
+                        <Ionicons name="close-circle" size={16} color={theme.colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
                   </View>
+
                   {loggedExercises.length === 0 ? (
-                    <Text style={styles.chartEmptyText}>
-                      Log workouts with weights to see strength charts here.
-                    </Text>
+                    <View style={styles.emptyState}>
+                      <Ionicons name="barbell-outline" size={28} color={theme.colors.textMuted} />
+                      <Text style={styles.emptyStateText}>
+                        Complete workouts to see your exercise history here.
+                      </Text>
+                    </View>
+                  ) : filteredExercises.length === 0 ? (
+                    <Text style={styles.noMatchText}>No exercises match "{exerciseSearch}"</Text>
                   ) : (
                     <ScrollView
-                      horizontal={false}
                       style={styles.exerciseList}
                       nestedScrollEnabled
                       keyboardShouldPersistTaps="handled"
@@ -169,51 +237,128 @@ export default function ProgressScreen() {
                           style={styles.exerciseRow}
                           onPress={() => selectExercise(name)}
                         >
-                          <Ionicons name="barbell-outline" size={16} color={theme.colors.textSecondary} />
+                          <Ionicons
+                            name="barbell-outline"
+                            size={16}
+                            color={theme.colors.textSecondary}
+                          />
                           <Text style={styles.exerciseRowText}>{name}</Text>
-                          <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
+                          <Ionicons
+                            name="chevron-forward"
+                            size={14}
+                            color={theme.colors.textMuted}
+                          />
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
                   )}
                 </>
               ) : (
+
+                /* ── Selected exercise: chart + history ── */
                 <>
-                  {/* Back + exercise name */}
-                  <View style={styles.chartHeader}>
-                    <TouchableOpacity onPress={() => { setSelectedExercise(null); setChartData([]); }} style={styles.backBtn}>
+                  {/* Header row */}
+                  <View style={styles.exerciseHeader}>
+                    <TouchableOpacity onPress={clearExercise} style={styles.backBtn}>
                       <Ionicons name="chevron-back" size={18} color={theme.colors.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.chartExerciseName} numberOfLines={1}>{selectedExercise}</Text>
+                    <Text style={styles.exerciseName} numberOfLines={1}>
+                      {selectedExercise}
+                    </Text>
                     {prCount > 0 && (
                       <View style={styles.prBadge}>
-                        <Text style={styles.prBadgeText}>{prCount} PR{prCount > 1 ? 's' : ''}</Text>
+                        <Text style={styles.prBadgeText}>
+                          {prCount} PR{prCount > 1 ? 's' : ''}
+                        </Text>
                       </View>
                     )}
                   </View>
 
-                  {isLoadingChart ? (
-                    <View style={styles.chartPlaceholder}>
+                  {isLoadingExercise ? (
+                    <View style={styles.loadingBox}>
                       <Spinner />
                     </View>
                   ) : (
                     <>
-                      <ExerciseLineChart
-                        data={chartData}
-                        width={width - 32 - 32} // screen padding - card padding
-                        height={180}
-                      />
-                      {chartData.length > 0 && (
-                        <View style={styles.chartLegend}>
-                          <View style={styles.legendItem}>
-                            <View style={[styles.legendDot, { backgroundColor: theme.colors.primary }]} />
-                            <Text style={styles.legendText}>Max weight</Text>
+                      {/* Weight trend chart — only if weighted data exists */}
+                      {chartData.length > 0 ? (
+                        <>
+                          <Text style={styles.subSectionLabel}>Weight Trend</Text>
+                          <ExerciseLineChart
+                            data={chartData}
+                            width={width - 32 - 32}
+                            height={160}
+                          />
+                          <View style={styles.chartLegend}>
+                            <View style={styles.legendItem}>
+                              <View style={[styles.legendDot, { backgroundColor: theme.colors.primary }]} />
+                              <Text style={styles.legendText}>Max weight</Text>
+                            </View>
+                            <View style={styles.legendItem}>
+                              <View style={[styles.legendDot, { backgroundColor: theme.colors.warning }]} />
+                              <Text style={styles.legendText}>PR</Text>
+                            </View>
                           </View>
-                          <View style={styles.legendItem}>
-                            <View style={[styles.legendDot, { backgroundColor: theme.colors.warning }]} />
-                            <Text style={styles.legendText}>PR</Text>
-                          </View>
+                        </>
+                      ) : null}
+
+                      {/* Session history */}
+                      <Text style={styles.subSectionLabel}>
+                        Session Log
+                        {historyData.length > 0 ? ` (${historyData.length})` : ''}
+                      </Text>
+
+                      {historyData.length === 0 ? (
+                        <View style={styles.emptyState}>
+                          <Ionicons
+                            name="calendar-outline"
+                            size={28}
+                            color={theme.colors.textMuted}
+                          />
+                          <Text style={styles.emptyStateText}>
+                            No logged sessions found for {selectedExercise}.
+                          </Text>
                         </View>
+                      ) : (
+                        historyData.map((entry) => (
+                          <View key={entry.sessionId} style={styles.historyCard}>
+                            <View style={styles.historyCardHeader}>
+                              <Ionicons
+                                name="calendar-outline"
+                                size={13}
+                                color={theme.colors.primary}
+                              />
+                              <Text style={styles.historyDate}>
+                                {formatDate(entry.completedAt)}
+                              </Text>
+                              <Text style={styles.historySessionName} numberOfLines={1}>
+                                {entry.sessionName}
+                              </Text>
+                            </View>
+
+                            <View style={styles.setsTable}>
+                              {/* Header */}
+                              <View style={styles.setsHeaderRow}>
+                                <Text style={[styles.setCell, styles.setCellLabel]}>Set</Text>
+                                <Text style={[styles.setCell, styles.setCellLabel, styles.setCellRight]}>Reps</Text>
+                                <Text style={[styles.setCell, styles.setCellLabel, styles.setCellRight]}>Weight</Text>
+                              </View>
+                              {entry.sets.map((set) => (
+                                <View key={set.setNumber} style={styles.setRow}>
+                                  <Text style={styles.setCell}>{set.setNumber}</Text>
+                                  <Text style={[styles.setCell, styles.setCellRight]}>
+                                    {set.actualReps != null ? set.actualReps : '—'}
+                                  </Text>
+                                  <Text style={[styles.setCell, styles.setCellRight]}>
+                                    {set.actualWeight != null
+                                      ? `${set.actualWeight} ${set.unit ?? 'lbs'}`
+                                      : '—'}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ))
                       )}
                     </>
                   )}
@@ -246,7 +391,10 @@ export default function ProgressScreen() {
           <View style={styles.empty}>
             <Ionicons name="barbell-outline" size={40} color={theme.colors.textMuted} />
             <Text style={styles.emptyText}>No sessions yet. Start your first workout!</Text>
-            <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/(app)/workouts')}>
+            <TouchableOpacity
+              style={styles.emptyCta}
+              onPress={() => router.push('/(app)/workouts')}
+            >
               <Text style={styles.emptyCtaText}>Log a Workout</Text>
             </TouchableOpacity>
           </View>
@@ -269,7 +417,9 @@ function StatBlock({ value, label }: { value: string; label: string }) {
 function ScorePill({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View style={[styles.scorePill, { borderColor: color + '40', backgroundColor: color + '15' }]}>
-      <Text style={[styles.scorePillText, { color }]}>{label} {Math.round(value)}%</Text>
+      <Text style={[styles.scorePillText, { color }]}>
+        {label} {Math.round(value)}%
+      </Text>
     </View>
   );
 }
@@ -279,12 +429,31 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingBottom: TAB_BAR_BOTTOM_INSET, gap: 10 },
   header: { gap: 16, marginBottom: 8 },
   title: { fontSize: 26, fontWeight: '700', color: theme.colors.text },
+
+  // Stats
   statsRow: { flexDirection: 'row', gap: 10 },
-  statBlock: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.border },
+  statBlock: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
   statValue: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
   statLabel: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 2, textAlign: 'center' },
+
   sectionTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
-  // Chart card
+  subSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Chart card container
   chartCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: 16,
@@ -294,6 +463,8 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 80,
   },
+
+  // Search
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,34 +477,117 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   searchInput: { flex: 1, fontSize: 14, color: theme.colors.text },
-  exerciseList: { maxHeight: 180 },
+  exerciseList: { maxHeight: 200 },
   exerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
   exerciseRowText: { flex: 1, fontSize: 14, color: theme.colors.text },
-  chartEmptyText: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 8 },
-  chartHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  noMatchText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+
+  // Empty states
+  emptyState: { alignItems: 'center', gap: 8, paddingVertical: 16 },
+  emptyStateText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // Selected exercise header
+  exerciseHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   backBtn: { padding: 2 },
-  chartExerciseName: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.colors.text },
-  prBadge: { backgroundColor: theme.colors.warning + '25', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: theme.colors.warning + '60' },
+  exerciseName: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  prBadge: {
+    backgroundColor: theme.colors.warning + '25',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.warning + '60',
+  },
   prBadgeText: { fontSize: 11, color: theme.colors.warning, fontWeight: '700' },
-  chartPlaceholder: { height: 180, alignItems: 'center', justifyContent: 'center' },
-  chartLegend: { flexDirection: 'row', gap: 16, paddingTop: 4 },
+  loadingBox: { height: 160, alignItems: 'center', justifyContent: 'center' },
+
+  // Chart legend
+  chartLegend: { flexDirection: 'row', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, color: theme.colors.textSecondary },
+
+  // History cards
+  historyCard: {
+    backgroundColor: theme.colors.bg,
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  historyDate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  historySessionName: {
+    flex: 1,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textAlign: 'right',
+  },
+
+  // Sets table
+  setsTable: { gap: 2 },
+  setsHeaderRow: {
+    flexDirection: 'row',
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    marginBottom: 2,
+  },
+  setRow: { flexDirection: 'row', paddingVertical: 3 },
+  setCell: { fontSize: 13, color: theme.colors.text, width: 36 },
+  setCellLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  setCellRight: { flex: 1, textAlign: 'right' },
+
   // Session list
   sessionItem: { gap: 4 },
   scoreRow: { flexDirection: 'row', gap: 6, paddingLeft: 4 },
-  scorePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  scorePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
   scorePillText: { fontSize: 11, fontWeight: '600' },
   empty: { paddingTop: 60, alignItems: 'center', gap: 12 },
   emptyText: { color: theme.colors.textSecondary, textAlign: 'center', fontSize: 14 },
-  emptyCta: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: theme.colors.primary, borderRadius: 12 },
+  emptyCta: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+  },
   emptyCtaText: { fontSize: 15, fontWeight: '600', color: '#fff' },
 });

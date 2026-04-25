@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { list, getActive, getById, updateStatus } from '../controllers/program.controller';
+import { list, getActive, getById, updateStatus, createCustom } from '../controllers/program.controller';
 
 const router = Router();
 
@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 router.get('/', list);
 router.get('/active', getActive);
+router.post('/custom', createCustom);
 router.get('/:id', getById);
 router.patch('/:id/status', updateStatus);
 

@@ -8,6 +8,12 @@ const generateSchema = z.object({
   fitnessLevel: z.enum(['beginner', 'intermediate', 'advanced', 'Beginner', 'Intermediate', 'Advanced']).optional(),
   daysPerWeek: z.number().int().min(1).max(7).optional(),
   equipment: z.string().max(500).optional(),
+  preferredSplit: z.string().max(100).optional(),
+  benchmarkBench: z.number().positive().optional(),
+  benchmarkSquat: z.number().positive().optional(),
+  benchmarkDeadlift: z.number().positive().optional(),
+  benchmarkPress: z.number().positive().optional(),
+  unitSystem: z.enum(['lbs', 'kg']).optional(),
 });
 
 export async function generate(
@@ -30,6 +36,22 @@ export async function generate(
 const generateProgramSchema = z.object({
   customization: z.string().max(500).optional(),
 });
+
+/** Generate a program with AI and return the raw data WITHOUT saving it.
+ *  Used by the Build wizard so the user can review/edit before committing. */
+export async function previewProgram(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { customization } = generateProgramSchema.parse(req.body);
+    const aiResult = await aiService.generateProgram(req.user.id, customization);
+    res.json({ preview: aiResult });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function generateProgram(
   req: Request,

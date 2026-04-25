@@ -78,6 +78,12 @@ export interface PlannedExerciseSet {
   targetWeight: number | null;
   rpeTarget?: string;
   unit: string;
+  /** If set, this is a percentage-of-max prescription (e.g. 75 = 75%) */
+  percentOfMax?: number | null;
+  /** Which benchmark to use for the % calculation */
+  percentBasis?: 'bench' | 'squat' | 'deadlift' | 'press' | 'custom' | null;
+  /** User-supplied 1RM when percentBasis === 'custom' */
+  customOneRepMax?: number | null;
 }
 
 export interface PlannedExercise {
@@ -287,6 +293,7 @@ export interface SetInput {
 export interface CreateTemplateInput {
   name: string;
   description?: string;
+  dayOfWeek?: string;
   exercises: ExerciseInput[];
 }
 
@@ -305,6 +312,12 @@ export interface GenerateAiInput {
   fitnessLevel?: string;
   daysPerWeek?: number;
   equipment?: string;
+  preferredSplit?: string;
+  benchmarkBench?: number;
+  benchmarkSquat?: number;
+  benchmarkDeadlift?: number;
+  benchmarkPress?: number;
+  unitSystem?: 'lbs' | 'kg';
 }
 
 // ─── Program Marketplace ───────────────────────────────────────────────────
