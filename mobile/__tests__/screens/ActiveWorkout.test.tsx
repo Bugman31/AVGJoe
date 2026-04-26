@@ -1,7 +1,7 @@
 /**
- * Tests for Feature 6: Done button guard.
- * Verifies that tapping Done without entering reps shows an error Toast
- * and does NOT call the log-set API.
+ * Tests for the active workout entry flow.
+ * Verifies that entered sets are saved when the workout is completed,
+ * without requiring a per-set Done button.
  */
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
@@ -66,6 +66,7 @@ import { api } from '@/lib/api';
 
 const mockGet  = api.get  as jest.Mock;
 const mockPost = api.post as jest.Mock;
+const mockPatch = api.patch as jest.Mock;
 const mockToastShow = Toast.show as jest.Mock;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -108,6 +109,12 @@ const mockPlannedWorkout = {
 // ─── Setup ────────────────────────────────────────────────────────────────────
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPatch.mockResolvedValue({
+    session: {
+      ...mockSession,
+      completedAt: new Date().toISOString(),
+    },
+  });
   mockGet.mockImplementation((url: string) => {
     if (url.includes('/api/sessions/sess-1')) {
       return Promise.resolve({ session: mockSession });
@@ -133,7 +140,7 @@ describe('ActiveWorkout — Notes FAB (Feature 9)', () => {
 describe('ActiveWorkout — Previous session data (Feature 7)', () => {
   it('fetches last-exercise data for each exercise on load', async () => {
     const { findByTestId } = render(<ActiveWorkoutScreen />);
-    await findByTestId('done-btn-0-1'); // wait for load
+    await findByTestId('reps-input-0-1'); // wait for load
     // Should have called last-exercise endpoint
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('last-exercise/Bench%20Press')
@@ -141,36 +148,49 @@ describe('ActiveWorkout — Previous session data (Feature 7)', () => {
   });
 });
 
-describe('ActiveWorkout — Done button guard (Feature 6)', () => {
-  it('shows error Toast and does NOT post to API when Done pressed with no reps', async () => {
-    const { findByTestId } = render(<ActiveWorkoutScreen />);
+describe('ActiveWorkout — Finish saves entered sets', () => {
+  it('does not post any set rows when no reps were entered', async () => {
+    const { findByText } = render(<ActiveWorkoutScreen />);
 
-    const doneBtn = await findByTestId('done-btn-0-1');
-    await act(async () => { fireEvent.press(doneBtn); });
+    const finishBtn = await findByText('Finish Workout');
+    await act(async () => { fireEvent.press(finishBtn); });
+
+    const completeBtn = await findByText('Complete');
+    await act(async () => { fireEvent.press(completeBtn); });
 
     await waitFor(() =>
-      expect(mockToastShow).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', text1: expect.stringContaining('reps') })
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/api/sessions/sess-1/complete',
+        expect.any(Object)
       )
     );
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalledWith(
+      '/api/sessions/sess-1/sets',
+      expect.any(Object)
+    );
   });
 
-  it('posts to API when Done is pressed after entering reps', async () => {
+  it('posts entered set data when finishing the workout after entering reps', async () => {
     mockPost.mockResolvedValue({});
-    const { findByTestId } = render(<ActiveWorkoutScreen />);
+    const { findByTestId, findByText } = render(<ActiveWorkoutScreen />);
 
     const repsInput = await findByTestId('reps-input-0-1');
     await act(async () => { fireEvent.changeText(repsInput, '8'); });
 
-    const doneBtn = await findByTestId('done-btn-0-1');
-    await act(async () => { fireEvent.press(doneBtn); });
+    const finishBtn = await findByText('Finish Workout');
+    await act(async () => { fireEvent.press(finishBtn); });
+
+    const completeBtn = await findByText('Complete');
+    await act(async () => { fireEvent.press(completeBtn); });
 
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith(
         '/api/sessions/sess-1/sets',
         expect.objectContaining({ exerciseName: 'Bench Press', setNumber: 1 })
       )
+    );
+    expect(mockToastShow).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', text1: expect.stringContaining('reps') })
     );
   });
 });

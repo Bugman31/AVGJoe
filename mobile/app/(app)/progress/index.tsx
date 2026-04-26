@@ -78,7 +78,9 @@ export default function ProgressScreen() {
 
   async function loadSessions() {
     try {
-      const res = await api.get<{ sessions: SessionWithScores[]; total: number }>('/api/sessions?limit=50');
+      const res = await api.get<{ sessions: SessionWithScores[]; total: number }>(
+        '/api/sessions?limit=50&includeSets=true'
+      );
       setSessions(res.sessions);
     } catch {
       // silent fail
@@ -373,6 +375,7 @@ export default function ProgressScreen() {
           <View style={styles.sessionItem}>
             <SessionCard
               session={item}
+              showExerciseHistory
               onPress={() => router.push(`/(app)/progress/${item.id}`)}
             />
             {(item.completionScore != null || item.performanceScore != null) && (

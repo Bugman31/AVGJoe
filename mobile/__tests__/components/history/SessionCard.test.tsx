@@ -64,6 +64,45 @@ describe('SessionCard', () => {
     expect(getByText('Felt strong today')).toBeTruthy();
   });
 
+  it('renders movement history when requested', () => {
+    const detailedSession: WorkoutSession = {
+      ...completedSession,
+      sets: [
+        ...completedSession.sets!,
+        {
+          id: 'ss-2',
+          sessionId: 'session-1',
+          exerciseId: 'ex-1',
+          exerciseName: 'Bench Press',
+          setNumber: 2,
+          actualReps: 6,
+          actualWeight: 85,
+          unit: 'kg',
+          completedAt: '2026-03-01T09:35:00.000Z',
+        },
+        {
+          id: 'ss-3',
+          sessionId: 'session-1',
+          exerciseId: 'ex-2',
+          exerciseName: 'Incline Dumbbell Press',
+          setNumber: 1,
+          actualReps: 10,
+          actualWeight: 30,
+          unit: 'kg',
+          completedAt: '2026-03-01T09:45:00.000Z',
+        },
+      ],
+    };
+    const { getByText } = render(
+      <SessionCard session={detailedSession} showExerciseHistory />,
+    );
+    expect(getByText('Movement History')).toBeTruthy();
+    expect(getByText('Bench Press')).toBeTruthy();
+    expect(getByText('8 x 80 kg, 6 x 85 kg')).toBeTruthy();
+    expect(getByText('Incline Dumbbell Press')).toBeTruthy();
+    expect(getByText('10 x 30 kg')).toBeTruthy();
+  });
+
   it('does not render notes section when absent', () => {
     const noNotes = { ...completedSession, notes: null };
     const { queryByText } = render(<SessionCard session={noNotes} />);

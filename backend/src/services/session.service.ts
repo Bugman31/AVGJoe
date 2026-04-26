@@ -49,7 +49,12 @@ export async function startSession(userId: string, data: StartSessionData) {
   });
 }
 
-export async function listSessions(userId: string, limit: number, offset: number) {
+export async function listSessions(
+  userId: string,
+  limit: number,
+  offset: number,
+  includeSets = false
+) {
   const [sessions, total] = await Promise.all([
     prisma.workoutSession.findMany({
       where: { userId },
@@ -58,17 +63,38 @@ export async function listSessions(userId: string, limit: number, offset: number
       skip: offset,
       select: {
         id: true,
+        templateId: true,
         name: true,
         startedAt: true,
         completedAt: true,
         plannedWorkoutId: true,
         programId: true,
+        notes: true,
         completionScore: true,
         performanceScore: true,
         preEnergyLevel: true,
         postEnergyLevel: true,
         sorenessLevel: true,
         _count: { select: { sets: true } },
+        ...(includeSets
+          ? {
+              sets: {
+                orderBy: [{ exerciseName: 'asc' }, { setNumber: 'asc' }],
+                select: {
+                  id: true,
+                  sessionId: true,
+                  exerciseId: true,
+                  exerciseName: true,
+                  setNumber: true,
+                  actualReps: true,
+                  actualWeight: true,
+                  unit: true,
+                  rpe: true,
+                  completedAt: true,
+                },
+              },
+            }
+          : {}),
         template: { select: { id: true, name: true } },
       },
     }),

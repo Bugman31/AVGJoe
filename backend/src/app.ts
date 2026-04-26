@@ -17,6 +17,7 @@ import sharedProgramRoutes from './routes/sharedProgram.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
+const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '512kb';
 
 // Security headers
 app.use(helmet());
@@ -38,9 +39,9 @@ app.use(
   })
 );
 
-// Body parsing — 50kb limit to prevent payload DoS
-app.use(express.json({ limit: '50kb' }));
-app.use(express.urlencoded({ extended: true, limit: '50kb' }));
+// Body parsing — allow larger AI-generated program payloads while keeping a bounded limit
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
 
 // Health check
 app.get('/health', (_req, res) => {

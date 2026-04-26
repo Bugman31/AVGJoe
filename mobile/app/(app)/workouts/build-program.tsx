@@ -12,12 +12,10 @@ import {
   View,
   Text,
   ScrollView,
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Alert,
   ActivityIndicator,
@@ -26,9 +24,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import DraggableFlatList, {
+  ScaleDecorator,
+  type RenderItemParams,
+} from 'react-native-draggable-flatlist';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
+import { Button } from '@/components/ui/Button';
+import { ExercisePickerModal, type PickedExercise } from '@/components/workouts/ExercisePickerModal';
 import { colors, spacing, typography, radii } from '@/lib/theme';
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -41,6 +45,7 @@ const DAY_ABBREV = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 // ─── types ────────────────────────────────────────────────────────────────────
 
 interface ExerciseRow {
+  id: string;
   name: string;
   sets: string;   // kept as string for TextInput
   reps: string;
@@ -93,6 +98,10 @@ interface AiPreview {
   workouts: AiWorkout[];
 }
 
+function makeExerciseId(): string {
+  return `ex_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function aiPreviewToWeekData(preview: AiPreview): {
   weeks: WeekData[];
   name: string;
@@ -117,6 +126,7 @@ function aiPreviewToWeekData(preview: AiPreview): {
         exercises: pw.exercises.map((ex) => {
           const s0 = ex.sets[0] ?? {};
           return {
+            id: makeExerciseId(),
             name: ex.name,
             sets: String(ex.sets.length),
             reps: s0.targetReps != null ? String(s0.targetReps) : '',
@@ -135,7 +145,17 @@ function aiPreviewToWeekData(preview: AiPreview): {
 }
 
 function emptyExercise(): ExerciseRow {
-  return { name: '', sets: '3', reps: '8', weight: '', unit: 'lbs', percentBasis: 'bench', customOneRepMax: '', notes: '' };
+  return {
+    id: makeExerciseId(),
+    name: '',
+    sets: '3',
+    reps: '8',
+    weight: '',
+    unit: 'lbs',
+    percentBasis: 'bench',
+    customOneRepMax: '',
+    notes: '',
+  };
 }
 
 function emptyDayWorkout(day: string): DayWorkout {
@@ -186,133 +206,6 @@ function toApiExercises(exercises: ExerciseRow[]) {
     });
 }
 
-// ─── Exercise library ────────────────────────────────────────────────────────
-
-const COMMON_EXERCISES = [
-  // Squat / Lower Push
-  'Barbell Back Squat', 'Barbell Front Squat', 'Goblet Squat', 'Box Squat', 'Zercher Squat',
-  'Bulgarian Split Squat', 'Leg Press', 'Hack Squat', 'Lunges', 'Walking Lunge', 'Step-Up',
-  // Hinge
-  'Conventional Deadlift', 'Sumo Deadlift', 'Romanian Deadlift', 'Stiff-Leg Deadlift',
-  'Trap Bar Deadlift', 'Good Morning', 'Hip Thrust', 'Glute Bridge',
-  // Horizontal Push
-  'Barbell Bench Press', 'Dumbbell Bench Press', 'Incline Barbell Bench Press',
-  'Incline Dumbbell Press', 'Decline Bench Press', 'Close-Grip Bench Press', 'Dip', 'Push-Up',
-  // Vertical Push
-  'Overhead Press', 'Dumbbell Shoulder Press', 'Push Press', 'Arnold Press', 'Landmine Press',
-  // Vertical Pull
-  'Pull-Up', 'Chin-Up', 'Lat Pulldown', 'Cable Pulldown',
-  // Horizontal Pull
-  'Barbell Row', 'Pendlay Row', 'Dumbbell Row', 'Cable Row', 'Seated Row', 'T-Bar Row',
-  'Face Pull', 'Band Pull-Apart',
-  // Legs
-  'Leg Extension', 'Leg Curl', 'Seated Leg Curl', 'Calf Raise', 'Leg Abduction', 'Leg Adduction',
-  // Arms
-  'Barbell Curl', 'Dumbbell Curl', 'Hammer Curl', 'Preacher Curl', 'Cable Curl', 'Concentration Curl',
-  'Skull Crusher', 'Tricep Pushdown', 'Overhead Tricep Extension', 'Diamond Push-Up', 'Kickback',
-  // Shoulders
-  'Lateral Raise', 'Front Raise', 'Rear Delt Fly', 'Upright Row', 'Shrug', 'Cable Face Pull',
-  // Core
-  'Plank', 'Ab Wheel Rollout', 'Hanging Leg Raise', 'Cable Crunch', 'Crunch', 'Sit-Up',
-  'Russian Twist', 'Pallof Press', 'Dead Bug', 'Bird Dog', 'Side Plank',
-  // Athletic / Compound
-  'Farmers Walk', 'Sled Push', 'Box Jump', 'Kettlebell Swing', 'Power Clean',
-  'Turkish Get-Up', 'Battle Ropes',
-];
-
-// ─── ExercisePicker ───────────────────────────────────────────────────────────
-
-interface ExercisePickerProps {
-  visible: boolean;
-  onSelect: (name: string) => void;
-  onClose: () => void;
-  recentExercises: string[];
-}
-
-function ExercisePicker({ visible, onSelect, onClose, recentExercises }: ExercisePickerProps) {
-  const [query, setQuery] = React.useState('');
-
-  const data = React.useMemo(() => {
-    const q = query.toLowerCase().trim();
-    const recentSet = new Set(recentExercises.map((e) => e.toLowerCase()));
-    const commons = q
-      ? COMMON_EXERCISES.filter((e) => e.toLowerCase().includes(q))
-      : COMMON_EXERCISES;
-    const recents = q
-      ? recentExercises.filter((e) => e.toLowerCase().includes(q))
-      : recentExercises;
-    // Merge: recent first, then common not already in recent
-    const filtered = commons.filter((e) => !recentSet.has(e.toLowerCase()));
-    return [...recents, ...filtered];
-  }, [query, recentExercises]);
-
-  function handleSelect(name: string) {
-    onSelect(name);
-    setQuery('');
-    onClose();
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={ep.overlay}>
-        <TouchableOpacity style={ep.backdrop} onPress={onClose} activeOpacity={1} />
-        <View style={ep.sheet}>
-          <View style={ep.handleBar} />
-          <View style={ep.header}>
-            <Text style={ep.title}>Select Exercise</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Search */}
-          <View style={ep.searchRow}>
-            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
-            <TextInput
-              style={ep.searchInput}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search exercises…"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')}>
-                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <FlatList
-            data={data}
-            keyExtractor={(item) => item}
-            keyboardShouldPersistTaps="handled"
-            style={ep.list}
-            renderItem={({ item }) => {
-              const isRecent = recentExercises.includes(item);
-              return (
-                <TouchableOpacity style={ep.item} onPress={() => handleSelect(item)}>
-                  <Text style={ep.itemText}>{item}</Text>
-                  {isRecent && <Text style={ep.recentBadge}>Recent</Text>}
-                </TouchableOpacity>
-              );
-            }}
-            ListFooterComponent={
-              query.trim() && !data.some((d) => d.toLowerCase() === query.toLowerCase().trim()) ? (
-                <TouchableOpacity style={ep.addItem} onPress={() => handleSelect(query.trim())}>
-                  <Ionicons name="add-circle-outline" size={16} color={colors.accent} />
-                  <Text style={ep.addItemText}>Add "{query.trim()}"</Text>
-                </TouchableOpacity>
-              ) : null
-            }
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 // ─── Step 1: Setup ───────────────────────────────────────────────────────────
 
 // ─── profile helpers ──────────────────────────────────────────────────────────
@@ -346,7 +239,7 @@ interface SetupStepProps {
   totalWeeks: number; setTotalWeeks: (v: number) => void;
   selectedDays: string[]; toggleDay: (d: string) => void;
   onNext: () => void;
-  onAiGenerate: (customization: string) => void;
+  onAiGenerate: (customization: string, totalWeeks: number) => void;
   isGenerating: boolean;
   hasActiveProgram: boolean;
 }
@@ -404,7 +297,7 @@ function SetupStep({
       );
       return;
     }
-    onAiGenerate(customization);
+    onAiGenerate(customization, totalWeeks);
   }
 
   return (
@@ -502,6 +395,35 @@ function SetupStep({
             )}
 
             {/* ── Customization ── */}
+            <Text style={s1.inputLabel}>Program Length</Text>
+            <View style={s1.aiLengthRow}>
+              <View style={s1.aiLengthTextWrap}>
+                <Text style={s1.aiLengthValue}>
+                  {totalWeeks} week{totalWeeks === 1 ? '' : 's'}
+                </Text>
+                <Text style={s1.aiLengthHint}>
+                  The AI plan will be generated for this many weeks.
+                </Text>
+              </View>
+              <View style={s1.stepper}>
+                <TouchableOpacity
+                  style={s1.stepBtn}
+                  onPress={() => setTotalWeeks(Math.max(1, totalWeeks - 1))}
+                  testID="ai-weeks-decrement"
+                >
+                  <Ionicons name="remove" size={18} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={s1.aiStepperValue}>{totalWeeks}</Text>
+                <TouchableOpacity
+                  style={s1.stepBtn}
+                  onPress={() => setTotalWeeks(Math.min(16, totalWeeks + 1))}
+                  testID="ai-weeks-increment"
+                >
+                  <Ionicons name="add" size={18} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <Text style={s1.inputLabel}>Customization (optional)</Text>
             <TextInput
               style={s1.aiInput}
@@ -621,17 +543,18 @@ interface WeekEditorProps {
   updateExercise: (wk: number, day: number, ex: number, field: keyof ExerciseRow, val: string) => void;
   addExercise: (wk: number, day: number) => void;
   removeExercise: (wk: number, day: number, ex: number) => void;
+  reorderExercises: (wk: number, day: number, exercises: ExerciseRow[]) => void;
   copyFromWeek: (fromIdx: number, toIdx: number) => void;
   isSaving: boolean;
   onSave: () => void;
   onBack: () => void;
-  recentExercises: string[];
+  onOpenExercisePicker: (weekIdx: number, dayIdx: number, exIdx: number) => void;
 }
 
 function WeekEditor({
   weeks, activeWeekIdx, setActiveWeekIdx,
-  updateWorkout, toggleDayCard, updateExercise, addExercise, removeExercise,
-  copyFromWeek, isSaving, onSave, onBack, recentExercises,
+  updateWorkout, toggleDayCard, updateExercise, addExercise, removeExercise, reorderExercises,
+  copyFromWeek, isSaving, onSave, onBack, onOpenExercisePicker,
 }: WeekEditorProps) {
   const weekTabsRef = useRef<ScrollView>(null);
 
@@ -699,14 +622,17 @@ function WeekEditor({
               dw={dw}
               weekIdx={activeWeekIdx}
               dayIdx={dayIdx}
-              recentExercises={recentExercises}
               onToggle={() => toggleDayCard(activeWeekIdx, dayIdx)}
               onWorkoutChange={(field, val) => updateWorkout(activeWeekIdx, dayIdx, field, val)}
               onExerciseChange={(exIdx, field, val) =>
                 updateExercise(activeWeekIdx, dayIdx, exIdx, field, val)
               }
+              onOpenExercisePicker={(exIdx) => onOpenExercisePicker(activeWeekIdx, dayIdx, exIdx)}
               onAddExercise={() => addExercise(activeWeekIdx, dayIdx)}
               onRemoveExercise={(exIdx) => removeExercise(activeWeekIdx, dayIdx, exIdx)}
+              onReorderExercises={(exercises) =>
+                reorderExercises(activeWeekIdx, dayIdx, exercises)
+              }
             />
           ))}
 
@@ -772,37 +698,145 @@ interface DayCardProps {
   dw: DayWorkout;
   weekIdx: number;
   dayIdx: number;
-  recentExercises: string[];
   onToggle: () => void;
   onWorkoutChange: (field: 'name' | 'focus', val: string) => void;
   onExerciseChange: (exIdx: number, field: keyof ExerciseRow, val: string) => void;
+  onOpenExercisePicker: (exIdx: number) => void;
   onAddExercise: () => void;
   onRemoveExercise: (exIdx: number) => void;
+  onReorderExercises: (exercises: ExerciseRow[]) => void;
 }
 
 function DayCard({
-  dw, recentExercises, onToggle, onWorkoutChange, onExerciseChange, onAddExercise, onRemoveExercise,
+  dw, onToggle, onWorkoutChange, onExerciseChange, onOpenExercisePicker, onAddExercise,
+  onRemoveExercise, onReorderExercises,
 }: DayCardProps) {
   const exerciseCount = dw.exercises.filter((e) => e.name.trim()).length;
-  const [pickerExIdx, setPickerExIdx] = useState<number | null>(null);
 
   function cycleUnit(exIdx: number, current: 'lbs' | 'kg' | '%') {
     const next = current === 'lbs' ? 'kg' : current === 'kg' ? '%' : 'lbs';
     onExerciseChange(exIdx, 'unit', next);
   }
 
+  function renderExerciseRow({
+    item: ex,
+    getIndex,
+    drag,
+    isActive,
+  }: RenderItemParams<ExerciseRow>) {
+    const exIdx = getIndex();
+    if (exIdx == null) return null;
+
+    return (
+      <ScaleDecorator>
+        <View style={[dc.exerciseBlock, isActive && dc.exerciseBlockActive]}>
+          <View style={dc.exRow}>
+            <TouchableOpacity
+              style={dc.dragHandle}
+              onLongPress={drag}
+              delayLongPress={120}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              testID={`exercise-drag-${dw.day}-${exIdx}`}
+            >
+              <Ionicons name="reorder-three-outline" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[dc.exPickerBtn, { flex: 3 }]}
+              onPress={() => onOpenExercisePicker(exIdx)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={ex.name ? dc.exPickerText : dc.exPickerPlaceholder}
+                numberOfLines={1}
+              >
+                {ex.name || 'Exercise'}
+              </Text>
+              <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TextInput
+              style={[dc.exInput, dc.exCellCenter]}
+              value={ex.sets}
+              onChangeText={(v) => onExerciseChange(exIdx, 'sets', v)}
+              keyboardType="numeric"
+              placeholder="3"
+              placeholderTextColor={colors.textMuted}
+            />
+            <TextInput
+              style={[dc.exInput, dc.exCellCenter]}
+              value={ex.reps}
+              onChangeText={(v) => onExerciseChange(exIdx, 'reps', v)}
+              keyboardType="numeric"
+              placeholder="8"
+              placeholderTextColor={colors.textMuted}
+            />
+            <TextInput
+              style={[dc.exInput, dc.exCellCenter]}
+              value={ex.weight}
+              onChangeText={(v) => onExerciseChange(exIdx, 'weight', v)}
+              keyboardType="decimal-pad"
+              placeholder={ex.unit === '%' ? '75' : '—'}
+              placeholderTextColor={colors.textMuted}
+            />
+            <TouchableOpacity
+              style={[dc.unitToggle, ex.unit === '%' && dc.unitTogglePercent]}
+              onPress={() => cycleUnit(exIdx, ex.unit)}
+            >
+              <Text style={[dc.unitText, ex.unit === '%' && dc.unitTextPercent]}>
+                {ex.unit}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                if (dw.exercises.length === 1) return;
+                onRemoveExercise(exIdx);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="close-circle-outline"
+                size={18}
+                color={dw.exercises.length === 1 ? colors.border : colors.textMuted}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {ex.unit === '%' && (
+            <View style={dc.basisRow}>
+              <Text style={dc.basisLabel}>% of:</Text>
+              {BASIS_OPTIONS.map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[dc.basisChip, ex.percentBasis === key && dc.basisChipActive]}
+                  onPress={() => onExerciseChange(exIdx, 'percentBasis', key)}
+                >
+                  <Text style={[dc.basisChipText, ex.percentBasis === key && dc.basisChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {ex.percentBasis === 'custom' && (
+                <TextInput
+                  style={dc.basisCustomInput}
+                  value={ex.customOneRepMax}
+                  onChangeText={(v) => onExerciseChange(exIdx, 'customOneRepMax', v)}
+                  placeholder="1RM"
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={colors.textMuted}
+                />
+              )}
+            </View>
+          )}
+        </View>
+      </ScaleDecorator>
+    );
+  }
+
   return (
     <View style={dc.card}>
-      {/* Exercise picker modal (one shared instance per DayCard) */}
-      <ExercisePicker
-        visible={pickerExIdx !== null}
-        recentExercises={recentExercises}
-        onSelect={(name) => {
-          if (pickerExIdx !== null) onExerciseChange(pickerExIdx, 'name', name);
-        }}
-        onClose={() => setPickerExIdx(null)}
-      />
-
       {/* Card header */}
       <TouchableOpacity style={dc.header} onPress={onToggle} activeOpacity={0.7}>
         <View style={dc.headerLeft}>
@@ -845,6 +879,7 @@ function DayCard({
 
           {/* Exercise table header */}
           <View style={dc.exHeader}>
+            <View style={{ width: 20 }} />
             <Text style={[dc.exHeaderCell, { flex: 3, textAlign: 'left' }]}>Exercise</Text>
             <Text style={[dc.exHeaderCell, dc.exCellCenter]}>Sets</Text>
             <Text style={[dc.exHeaderCell, dc.exCellCenter]}>Reps</Text>
@@ -853,104 +888,16 @@ function DayCard({
             <View style={{ width: 24 }} />
           </View>
 
-          {/* Exercise rows */}
-          {dw.exercises.map((ex, exIdx) => (
-            <View key={exIdx}>
-              {/* Main row */}
-              <View style={dc.exRow}>
-                {/* Exercise name — opens picker */}
-                <TouchableOpacity
-                  style={[dc.exPickerBtn, { flex: 3 }]}
-                  onPress={() => setPickerExIdx(exIdx)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={ex.name ? dc.exPickerText : dc.exPickerPlaceholder}
-                    numberOfLines={1}
-                  >
-                    {ex.name || 'Exercise'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
-                </TouchableOpacity>
-
-                <TextInput
-                  style={[dc.exInput, dc.exCellCenter]}
-                  value={ex.sets}
-                  onChangeText={(v) => onExerciseChange(exIdx, 'sets', v)}
-                  keyboardType="numeric"
-                  placeholder="3"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <TextInput
-                  style={[dc.exInput, dc.exCellCenter]}
-                  value={ex.reps}
-                  onChangeText={(v) => onExerciseChange(exIdx, 'reps', v)}
-                  keyboardType="numeric"
-                  placeholder="8"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <TextInput
-                  style={[dc.exInput, dc.exCellCenter]}
-                  value={ex.weight}
-                  onChangeText={(v) => onExerciseChange(exIdx, 'weight', v)}
-                  keyboardType="decimal-pad"
-                  placeholder={ex.unit === '%' ? '75' : '—'}
-                  placeholderTextColor={colors.textMuted}
-                />
-                {/* Unit toggle: lbs → kg → % → lbs */}
-                <TouchableOpacity
-                  style={[dc.unitToggle, ex.unit === '%' && dc.unitTogglePercent]}
-                  onPress={() => cycleUnit(exIdx, ex.unit)}
-                >
-                  <Text style={[dc.unitText, ex.unit === '%' && dc.unitTextPercent]}>
-                    {ex.unit}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    if (dw.exercises.length === 1) return;
-                    onRemoveExercise(exIdx);
-                  }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons
-                    name="close-circle-outline"
-                    size={18}
-                    color={dw.exercises.length === 1 ? colors.border : colors.textMuted}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* % basis sub-row */}
-              {ex.unit === '%' && (
-                <View style={dc.basisRow}>
-                  <Text style={dc.basisLabel}>% of:</Text>
-                  {BASIS_OPTIONS.map(({ key, label }) => (
-                    <TouchableOpacity
-                      key={key}
-                      style={[dc.basisChip, ex.percentBasis === key && dc.basisChipActive]}
-                      onPress={() => onExerciseChange(exIdx, 'percentBasis', key)}
-                    >
-                      <Text style={[dc.basisChipText, ex.percentBasis === key && dc.basisChipTextActive]}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  {ex.percentBasis === 'custom' && (
-                    <TextInput
-                      style={dc.basisCustomInput}
-                      value={ex.customOneRepMax}
-                      onChangeText={(v) => onExerciseChange(exIdx, 'customOneRepMax', v)}
-                      placeholder="1RM"
-                      keyboardType="decimal-pad"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  )}
-                </View>
-              )}
-            </View>
-          ))}
+          <DraggableFlatList
+            data={dw.exercises}
+            keyExtractor={(item) => item.id}
+            renderItem={renderExerciseRow}
+            onDragEnd={({ data }) => onReorderExercises(data)}
+            scrollEnabled={false}
+            nestedScrollEnabled
+            containerStyle={dc.exerciseList}
+            activationDistance={12}
+          />
 
           {/* Add exercise */}
           <TouchableOpacity style={dc.addExBtn} onPress={onAddExercise}>
@@ -968,6 +915,11 @@ function DayCard({
 export default function BuildProgramScreen() {
   const router = useRouter();
   const { program: activeProgram } = useActiveProgram();
+  const [pickerTarget, setPickerTarget] = useState<{
+    weekIdx: number;
+    dayIdx: number;
+    exIdx: number;
+  } | null>(null);
 
   // Step 1 state
   const [step, setStep] = useState<1 | 2>(1);
@@ -980,14 +932,6 @@ export default function BuildProgramScreen() {
   const [weeks, setWeeks] = useState<WeekData[]>([]);
   const [activeWeekIdx, setActiveWeekIdx] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [recentExercises, setRecentExercises] = useState<string[]>([]);
-
-  // Fetch recently used exercises for the picker
-  useEffect(() => {
-    api.get<{ exercises: string[] }>('/api/sessions/exercise-names')
-      .then((res) => setRecentExercises(res.exercises ?? []))
-      .catch(() => {}); // silently fail; common list still available
-  }, []);
 
   function toggleDay(day: string) {
     setSelectedDays((prev) =>
@@ -1006,12 +950,15 @@ export default function BuildProgramScreen() {
     setStep(2);
   }
 
-  async function handleAiGenerate(customization: string) {
+  async function handleAiGenerate(customization: string, requestedWeeks: number) {
     setIsGenerating(true);
     try {
       const res = await api.post<{ preview: AiPreview }>(
         '/api/ai/preview-program',
-        { customization: customization.trim() || undefined }
+        {
+          customization: customization.trim() || undefined,
+          totalWeeks: requestedWeeks,
+        }
       );
       const parsed = aiPreviewToWeekData(res.preview);
       setName(parsed.name);
@@ -1084,11 +1031,44 @@ export default function BuildProgramScreen() {
     });
   }, []);
 
+  const reorderExercises = useCallback((wk: number, day: number, exercises: ExerciseRow[]) => {
+    setWeeks((prev) => {
+      const next = prev.map((w) =>
+        w.map((d) => ({ ...d, exercises: [...d.exercises] }))
+      );
+      next[wk][day].exercises = exercises.map((exercise) => ({ ...exercise }));
+      return next;
+    });
+  }, []);
+
   const copyFromWeek = useCallback((fromIdx: number, toIdx: number) => {
     setWeeks((prev) => {
       const next = [...prev];
       next[toIdx] = deepCopyWeek(prev[fromIdx]);
       return next;
+    });
+  }, []);
+
+  const openExercisePicker = useCallback((weekIdx: number, dayIdx: number, exIdx: number) => {
+    setPickerTarget({ weekIdx, dayIdx, exIdx });
+  }, []);
+
+  const handlePickedExercise = useCallback((picked: PickedExercise) => {
+    setPickerTarget((target) => {
+      if (!target) return target;
+
+      setWeeks((prev) => {
+        const next = prev.map((week) =>
+          week.map((dayWorkout) => ({
+            ...dayWorkout,
+            exercises: dayWorkout.exercises.map((exercise) => ({ ...exercise })),
+          }))
+        );
+        next[target.weekIdx][target.dayIdx].exercises[target.exIdx].name = picked.name;
+        return next;
+      });
+
+      return null;
     });
   }, []);
 
@@ -1169,6 +1149,12 @@ export default function BuildProgramScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ExercisePickerModal
+        visible={pickerTarget !== null}
+        onClose={() => setPickerTarget(null)}
+        onSelect={handlePickedExercise}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -1181,8 +1167,19 @@ export default function BuildProgramScreen() {
           <Text style={styles.headerTitle}>Build Program</Text>
           <Text style={styles.headerStep}>Step {step} of 2</Text>
         </View>
-        {/* Spacer to balance the back arrow */}
-        <View style={{ width: 24 }} />
+        {step === 2 ? (
+          <Button
+            onPress={handleSave}
+            loading={isSaving}
+            disabled={isSaving}
+            size="sm"
+            testID="build-program-save-btn"
+          >
+            Save
+          </Button>
+        ) : (
+          <View style={{ width: 56 }} />
+        )}
       </View>
 
       {step === 1 ? (
@@ -1205,11 +1202,12 @@ export default function BuildProgramScreen() {
           updateExercise={updateExercise}
           addExercise={addExercise}
           removeExercise={removeExercise}
+          reorderExercises={reorderExercises}
           copyFromWeek={copyFromWeek}
           isSaving={isSaving}
           onSave={handleSave}
           onBack={() => setStep(1)}
-          recentExercises={recentExercises}
+          onOpenExercisePicker={openExercisePicker}
         />
       )}
     </SafeAreaView>
@@ -1355,6 +1353,33 @@ const s1 = StyleSheet.create({
   },
   aiBtnDisabled: { opacity: 0.6 },
   aiBtnText: { fontSize: typography.sm, fontWeight: '700', color: '#fff' },
+  aiLengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  aiLengthTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  aiLengthValue: {
+    fontSize: typography.md,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  aiLengthHint: {
+    fontSize: typography.xs,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  aiStepperValue: {
+    fontSize: typography.lg,
+    fontWeight: '700',
+    color: colors.text,
+    minWidth: 28,
+    textAlign: 'center',
+  },
   // Profile review box
   profileBox: {
     backgroundColor: colors.bg,
@@ -1534,6 +1559,11 @@ const dc = StyleSheet.create({
   },
   // Exercise table
   exHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 2 },
+  exerciseList: { gap: spacing.xs },
+  exerciseBlock: { gap: spacing.xs },
+  exerciseBlockActive: {
+    opacity: 0.96,
+  },
   exHeaderCell: {
     fontSize: 10,
     fontWeight: '700',
@@ -1544,6 +1574,11 @@ const dc = StyleSheet.create({
     width: 44,
   },
   exRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dragHandle: {
+    width: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   exInput: {
     backgroundColor: colors.bg,
     borderRadius: radii.sm,
@@ -1623,82 +1658,4 @@ const dc = StyleSheet.create({
   },
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: spacing.xs },
   addExText: { fontSize: typography.sm, fontWeight: '600', color: colors.accent },
-});
-
-// Exercise picker sheet
-const ep = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 32,
-  },
-  handleBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: { fontSize: typography.md, fontWeight: '700', color: colors.text },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    margin: spacing.md,
-    backgroundColor: colors.bg,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: typography.sm,
-    color: colors.text,
-    padding: 0,
-  },
-  list: { flex: 1 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  itemText: { fontSize: typography.sm, color: colors.text, flex: 1 },
-  recentBadge: {
-    fontSize: 10,
-    color: colors.accent,
-    fontWeight: '600',
-    backgroundColor: colors.accentLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  addItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  addItemText: { fontSize: typography.sm, color: colors.accent, fontWeight: '600' },
 });

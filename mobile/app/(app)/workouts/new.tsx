@@ -272,7 +272,7 @@ export default function NewWorkoutScreen() {
                     color={colors.textSecondary}
                   />
                   <Text style={styles.entryDayLabel}>
-                    {entry.day ?? 'No specific day'}
+                    {entry.day ?? 'Unscheduled workout'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -337,7 +337,7 @@ export default function NewWorkoutScreen() {
               }
             >
               <Ionicons name="add-circle-outline" size={16} color={colors.textSecondary} />
-              <Text style={styles.addSlotBtnText}>Add workout (no specific day)</Text>
+              <Text style={styles.addSlotBtnText}>Add unscheduled workout</Text>
             </TouchableOpacity>
           )}
 

@@ -11,6 +11,7 @@ interface SessionCardProps {
   session: WorkoutSession;
   onPress?: () => void;
   testID?: string;
+  showExerciseHistory?: boolean;
 }
 
 function formatDate(iso: string): string {
@@ -29,11 +30,43 @@ function formatDuration(start: string, end: string | null): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-export function SessionCard({ session, onPress, testID }: SessionCardProps) {
+function formatSetPreview(set: NonNullable<WorkoutSession['sets']>[number]): string {
+  const reps = set.actualReps != null ? `${set.actualReps}` : null;
+  const weight = set.actualWeight != null ? `${set.actualWeight} ${set.unit || 'lbs'}` : null;
+
+  if (reps && weight) return `${reps} x ${weight}`;
+  if (reps) return `${reps} reps`;
+  if (weight) return weight;
+  return 'Logged';
+}
+
+function buildExerciseSummaries(sets: NonNullable<WorkoutSession['sets']>) {
+  const grouped = new Map<string, string[]>();
+
+  for (const set of sets) {
+    const previews = grouped.get(set.exerciseName) ?? [];
+    previews.push(formatSetPreview(set));
+    grouped.set(set.exerciseName, previews);
+  }
+
+  return Array.from(grouped.entries()).map(([name, previews]) => ({
+    name,
+    preview: previews.slice(0, 4).join(', '),
+    hiddenCount: Math.max(previews.length - 4, 0),
+  }));
+}
+
+export function SessionCard({
+  session,
+  onPress,
+  testID,
+  showExerciseHistory = false,
+}: SessionCardProps) {
   const router = useRouter();
   const sets = session.sets ?? [];
   const uniqueExercises = new Set(sets.map((s) => s.exerciseName)).size;
   const totalSets = sets.length > 0 ? sets.length : (session._count?.sets ?? 0);
+  const exerciseSummaries = showExerciseHistory ? buildExerciseSummaries(sets) : [];
 
   return (
     <Pressable onPress={onPress ?? (() => router.push(`/history/${session.id}`))} testID={testID}>
@@ -68,6 +101,28 @@ export function SessionCard({ session, onPress, testID }: SessionCardProps) {
 
         {session.notes ? (
           <Text style={styles.notes} numberOfLines={2}>{session.notes}</Text>
+        ) : null}
+
+        {showExerciseHistory && exerciseSummaries.length > 0 ? (
+          <View style={styles.exerciseHistory}>
+            <Text style={styles.exerciseHistoryLabel}>Movement History</Text>
+            {exerciseSummaries.slice(0, 3).map((exercise) => (
+              <View key={exercise.name} style={styles.exerciseHistoryRow}>
+                <Text style={styles.exerciseHistoryName} numberOfLines={1}>
+                  {exercise.name}
+                </Text>
+                <Text style={styles.exerciseHistoryValue} numberOfLines={2}>
+                  {exercise.preview}
+                  {exercise.hiddenCount > 0 ? `, +${exercise.hiddenCount} more` : ''}
+                </Text>
+              </View>
+            ))}
+            {exerciseSummaries.length > 3 ? (
+              <Text style={styles.exerciseHistoryMore}>
+                +{exerciseSummaries.length - 3} more movements
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </Card>
     </Pressable>
@@ -108,5 +163,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontStyle: 'italic',
     marginTop: spacing.xs,
+  },
+  exerciseHistory: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: spacing.xs,
+  },
+  exerciseHistoryLabel: {
+    fontSize: typography.xs,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontWeight: '700',
+  },
+  exerciseHistoryRow: {
+    gap: 2,
+  },
+  exerciseHistoryName: {
+    fontSize: typography.sm,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  exerciseHistoryValue: {
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  exerciseHistoryMore: {
+    fontSize: typography.sm,
+    color: colors.textMuted,
   },
 });

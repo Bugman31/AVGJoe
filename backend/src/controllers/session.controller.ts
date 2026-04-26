@@ -51,7 +51,9 @@ export async function listSessions(
     const limit = isNaN(rawLimit) ? 20 : Math.max(1, Math.min(rawLimit, 100));
     const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
     const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
-    const result = await sessionService.listSessions(req.user.id, limit, offset);
+    const includeSets =
+      String(req.query.includeSets ?? 'false').toLowerCase() === 'true';
+    const result = await sessionService.listSessions(req.user.id, limit, offset, includeSets);
     res.json(result);
   } catch (err) {
     next(err);

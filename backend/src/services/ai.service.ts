@@ -590,10 +590,12 @@ type TemplateRow = Awaited<ReturnType<typeof prisma.workoutTemplate.findFirst>> 
 function templateToWorkout(
   template: NonNullable<TemplateRow>,
   weekNumber: number,
+  totalWeeks: number,
   dayOfWeek: string,
   coachNote: string
 ): AiPlannedWorkout {
-  const repBonus = weekNumber < 4 ? weekNumber - 1 : 0;
+  const isDeloadWeek = totalWeeks >= 4 && weekNumber === totalWeeks;
+  const repBonus = isDeloadWeek ? Math.max(totalWeeks - 2, 0) : Math.min(weekNumber - 1, 3);
 
   const exercises: AiPlannedExercise[] = template.exercises.map((ex) => {
     let sets: AiPlannedExerciseSet[] = ex.sets.map((s) => ({
@@ -604,7 +606,7 @@ function templateToWorkout(
       unit: s.unit,
     }));
     // Deload week: drop to ~2/3 of sets
-    if (weekNumber === 4) {
+    if (isDeloadWeek) {
       sets = sets.slice(0, Math.max(2, Math.floor(sets.length * 0.67)));
     }
     return { name: ex.name, orderIndex: ex.orderIndex, notes: ex.notes ?? '', sets };
@@ -613,9 +615,9 @@ function templateToWorkout(
   return {
     weekNumber,
     dayOfWeek,
-    name: weekNumber === 4 ? `${template.name} (Deload)` : template.name,
+    name: isDeloadWeek ? `${template.name} (Deload)` : template.name,
     focus: template.name,
-    estimatedDuration: weekNumber === 4 ? 40 : 65,
+    estimatedDuration: isDeloadWeek ? 40 : 65,
     warmup: [
       { name: '5 min light cardio', duration: '5 min' },
       { name: 'Dynamic mobility / activation', duration: '5 min' },
@@ -632,7 +634,11 @@ function validateAiCustomization(val: unknown): val is AiCustomization {
   return typeof v.programName === 'string' && typeof v.goalSummary === 'string';
 }
 
-export async function generateProgram(userId: string, customization?: string): Promise<AiGeneratedProgram> {
+export async function generateProgram(
+  userId: string,
+  customization?: string,
+  requestedWeeks?: number
+): Promise<AiGeneratedProgram> {
   const [resolved, profileRow] = await Promise.all([
     resolveAi(userId),
     prisma.userProfile.findUnique({ where: { userId } }),
@@ -702,9 +708,11 @@ export async function generateProgram(userId: string, customization?: string): P
     `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
   ].join(', ');
 
+  const totalWeeks = Math.min(Math.max(requestedWeeks ?? 4, 1), 16);
   const customNote = customization ? `\nCustomization request: "${customization}"` : '';
 
   const userPrompt = `Athlete profile: ${profileSummary}${customNote}
+Requested program length: ${totalWeeks} week${totalWeeks === 1 ? '' : 's'}
 Templates being used: ${templateNames.join(', ')}
 Return JSON (no text outside JSON):
 {
@@ -744,8 +752,7 @@ Only include exerciseSwaps if equipment or restrictions require it. Provide one 
     noteMap.set(note.templateName, note.coachNote);
   }
 
-  // Build 4-week schedule
-  const totalWeeks = 4;
+  // Build schedule for the requested program length
   const trainingDays = TRAINING_DAYS[Math.min(profile.daysPerWeek, 7)] ?? TRAINING_DAYS[3];
   const workouts: AiPlannedWorkout[] = [];
 
@@ -756,19 +763,37 @@ Only include exerciseSwaps if equipment or restrictions require it. Provide one 
       const modifiedTemplate = swaps
         ? { ...template, exercises: template.exercises.map((ex) => ({ ...ex, name: swaps.get(ex.name) ?? ex.name })) }
         : template;
-      workouts.push(templateToWorkout(modifiedTemplate, week, day, noteMap.get(template.name) ?? ''));
+      workouts.push(
+        templateToWorkout(
+          modifiedTemplate,
+          week,
+          totalWeeks,
+          day,
+          noteMap.get(template.name) ?? ''
+        )
+      );
     });
   }
+
+  const progressionRules =
+    totalWeeks >= 4
+      ? {
+          mainLifts: `Add 1 rep per set through week ${Math.max(totalWeeks - 1, 1)}; week ${totalWeeks} is a deload with reduced volume.`,
+          accessories: 'Maintain weight, focus on form and full range of motion.',
+          conditioning: 'Keep effort moderate and prioritize recovery on the final week.',
+        }
+      : {
+          mainLifts: `Add 1 rep per set each week through week ${totalWeeks}.`,
+          accessories: 'Maintain weight, focus on form and full range of motion.',
+          conditioning: 'Keep conditioning easy enough that strength work stays the priority.',
+        };
 
   return {
     programName: aiCustom.programName,
     programDescription: aiCustom.programDescription,
     totalWeeks,
     weeklyStructure: { split: splitName, days: trainingDays },
-    progressionRules: {
-      mainLifts: 'Add 1 rep per set each week (weeks 1–3); week 4 is a deload with reduced volume.',
-      accessories: 'Maintain weight, focus on form and full range of motion.',
-    },
+    progressionRules,
     aiGoalSummary: aiCustom.goalSummary,
     workouts,
   };

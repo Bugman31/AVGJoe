@@ -35,6 +35,7 @@ export async function generate(
 
 const generateProgramSchema = z.object({
   customization: z.string().max(500).optional(),
+  totalWeeks: z.number().int().min(1).max(16).optional(),
 });
 
 /** Generate a program with AI and return the raw data WITHOUT saving it.
@@ -45,8 +46,8 @@ export async function previewProgram(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { customization } = generateProgramSchema.parse(req.body);
-    const aiResult = await aiService.generateProgram(req.user.id, customization);
+    const { customization, totalWeeks } = generateProgramSchema.parse(req.body);
+    const aiResult = await aiService.generateProgram(req.user.id, customization, totalWeeks);
     res.json({ preview: aiResult });
   } catch (err) {
     next(err);
@@ -59,8 +60,8 @@ export async function generateProgram(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { customization } = generateProgramSchema.parse(req.body);
-    const aiResult = await aiService.generateProgram(req.user.id, customization);
+    const { customization, totalWeeks } = generateProgramSchema.parse(req.body);
+    const aiResult = await aiService.generateProgram(req.user.id, customization, totalWeeks);
 
     const program = await programService.createProgram(req.user.id, {
       name: aiResult.programName,

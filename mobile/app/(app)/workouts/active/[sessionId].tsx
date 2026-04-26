@@ -240,48 +240,91 @@ export default function ActiveWorkoutScreen() {
     setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], rpe: rpe || null } }));
   }
 
-  async function logSet(exerciseIndex: number, exercise: PlannedExercise, setNumber: number, unit: string) {
+  async function submitSet(payload: {
+    exerciseId: string;
+    exerciseName: string;
+    setNumber: number;
+    actualReps?: number;
+    actualWeight?: number;
+    unit: string;
+    rpe?: number;
+  }) {
     if (!sessionId) return;
-    const key = `${exerciseIndex}-${setNumber}`;
-    const state = setStates[key];
+    await api.post(`/api/sessions/${sessionId}/sets`, payload);
+  }
 
-    // Feature 6: require reps before marking done
-    if (!state.actualReps || state.actualReps.trim() === '') {
-      Toast.show({ type: 'error', text1: 'Enter reps before marking done' });
-      return;
-    }
-
-    const payload = {
-      exerciseId: `planned-${exerciseIndex}`,
-      exerciseName: exercise.name,
+  function buildSetPayload(
+    exerciseId: string,
+    exerciseName: string,
+    setNumber: number,
+    unit: string,
+    state: SetState
+  ) {
+    return {
+      exerciseId,
+      exerciseName,
       setNumber,
       actualReps: state.actualReps ? parseInt(state.actualReps, 10) : undefined,
       actualWeight: state.actualWeight ? parseFloat(state.actualWeight) : undefined,
       unit,
       rpe: state.rpe ?? undefined,
     };
+  }
 
-    try {
-      await api.post(`/api/sessions/${sessionId}/sets`, payload);
-      setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: true } }));
+  async function submitPendingSets() {
+    const pendingRequests: Promise<unknown>[] = [];
 
-      // Haptic feedback
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    exercises.forEach((exercise, ei) => {
+      const skipKey = `planned-${ei}`;
+      if (skippedExercises.has(skipKey)) return;
 
-      // Sound
-      playSound();
+      exercise.sets.forEach((set) => {
+        const key = `${ei}-${set.setNumber}`;
+        const state = setStates[key];
+        if (!state || state.logged || !state.actualReps || state.actualReps.trim() === '') return;
 
-      // Start rest timer
-      restTimer.start();
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to log set' });
-    }
+        pendingRequests.push(
+          submitSet(buildSetPayload(skipKey, exercise.name, set.setNumber, set.unit, state))
+        );
+      });
+    });
+
+    extraExercises.forEach((exercise, xi) => {
+      const prefix = `extra-${xi}`;
+      for (let si = 0; si < exercise.sets; si++) {
+        const setNumber = si + 1;
+        const key = `${prefix}-${setNumber}`;
+        const state = setStates[key];
+        if (!state || state.logged || !state.actualReps || state.actualReps.trim() === '') continue;
+
+        pendingRequests.push(
+          submitSet(buildSetPayload(key, exercise.name, setNumber, exercise.unit, state))
+        );
+      }
+    });
+
+    if (pendingRequests.length === 0) return;
+
+    await Promise.all(pendingRequests);
+    setSetStates((prev) => {
+      const next = { ...prev };
+
+      Object.entries(next).forEach(([key, state]) => {
+        if (state.actualReps && state.actualReps.trim() !== '') {
+          next[key] = { ...state, logged: true };
+        }
+      });
+
+      return next;
+    });
   }
 
   async function handleComplete() {
     if (!sessionId) return;
     setIsCompleting(true);
     try {
+      await submitPendingSets();
+
       const res = await api.patch<{ session: WorkoutSession & { aiSummary?: string } }>(
         `/api/sessions/${sessionId}/complete`,
         {
@@ -402,7 +445,6 @@ export default function ActiveWorkoutScreen() {
                       <Text style={[styles.colLabel, styles.colInput]}>Reps</Text>
                       <Text style={[styles.colLabel, styles.colInput]}>Weight</Text>
                       <Text style={[styles.colLabel, styles.colRpe]}>RPE</Text>
-                      <View style={styles.colDone} />
                     </View>
 
                     {exercise.sets.map((set) => {
@@ -444,18 +486,6 @@ export default function ActiveWorkoutScreen() {
                               {state.rpe ?? '—'}
                             </Text>
                           </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.doneBtn, state.logged && styles.doneBtnDone]}
-                            onPress={() => !state.logged && logSet(ei, exercise, set.setNumber, set.unit)}
-                            disabled={state.logged}
-                            testID={`done-btn-${ei}-${set.setNumber}`}
-                          >
-                            <Ionicons
-                              name={state.logged ? 'checkmark' : 'checkmark-outline'}
-                              size={18}
-                              color={state.logged ? theme.colors.success : theme.colors.textSecondary}
-                            />
-                          </TouchableOpacity>
                         </View>
                       );
                     })}
@@ -480,7 +510,6 @@ export default function ActiveWorkoutScreen() {
                   <Text style={[styles.colLabel, styles.colInput]}>Reps</Text>
                   <Text style={[styles.colLabel, styles.colInput]}>Weight</Text>
                   <Text style={[styles.colLabel, styles.colRpe]}>RPE</Text>
-                  <View style={styles.colDone} />
                 </View>
                 {Array.from({ length: ex.sets }, (_, si) => {
                   const key = `${prefix}-${si + 1}`;
@@ -513,32 +542,6 @@ export default function ActiveWorkoutScreen() {
                         disabled={state.logged}
                       >
                         <Text style={[styles.rpePillText, !!state.rpe && styles.rpePillTextActive]}>{state.rpe ?? '—'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.doneBtn, state.logged && styles.doneBtnDone]}
-                        onPress={() => {
-                          if (state.logged) return;
-                          if (!state.actualReps || state.actualReps.trim() === '') {
-                            Toast.show({ type: 'error', text1: 'Enter reps before marking done' });
-                            return;
-                          }
-                          api.post(`/api/sessions/${sessionId}/sets`, {
-                            exerciseId: key,
-                            exerciseName: ex.name,
-                            setNumber: si + 1,
-                            actualReps: state.actualReps ? parseInt(state.actualReps, 10) : undefined,
-                            actualWeight: state.actualWeight ? parseFloat(state.actualWeight) : undefined,
-                            unit: ex.unit,
-                            rpe: state.rpe ?? undefined,
-                          }).then(() => {
-                            setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: true } }));
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                            playSound();
-                            restTimer.start();
-                          }).catch(() => Toast.show({ type: 'error', text1: 'Failed to log set' }));
-                        }}
-                      >
-                        <Ionicons name={state.logged ? 'checkmark' : 'checkmark-outline'} size={18} color={state.logged ? theme.colors.success : theme.colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
                   );
@@ -821,12 +824,11 @@ const styles = StyleSheet.create({
   // Set table
   setHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   colLabel: { fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' },
-  colSet: { width: 28 },
-  colTarget: { flex: 1 },
-  colInput: { width: 50, textAlign: 'center' },
-  colRpe: { width: 36, textAlign: 'center' },
-  colDone: { width: 36 },
-  setRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, gap: 4 },
+  colSet: { width: 30 },
+  colTarget: { flex: 1, paddingRight: 8 },
+  colInput: { width: 64, textAlign: 'center' },
+  colRpe: { width: 42, textAlign: 'center' },
+  setRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   setRowDone: { opacity: 0.55 },
   setNum: { fontSize: 13, color: theme.colors.textSecondary },
   setTarget: { fontSize: 12, color: theme.colors.textMuted },
@@ -850,19 +852,18 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary + '50',
     borderRadius: 8,
     paddingVertical: 8,
+    paddingHorizontal: 8,
     fontSize: 16,
     fontWeight: '600',
     color: theme.colors.text,
     textAlign: 'center',
-    minHeight: 38,
+    height: 44,
   },
   inlineInputDone: { borderColor: theme.colors.success + '60', color: theme.colors.success },
-  rpePill: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  rpePill: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
   rpePillActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   rpePillText: { fontSize: 12, color: theme.colors.textMuted, fontWeight: '600' },
   rpePillTextActive: { color: theme.colors.primary },
-  doneBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
-  doneBtnDone: { borderColor: theme.colors.success + '60', backgroundColor: theme.colors.successLight },
   condCard: { gap: 8 },
   condHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   condTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
