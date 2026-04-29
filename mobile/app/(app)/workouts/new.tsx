@@ -233,11 +233,23 @@ export default function NewWorkoutScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.heroCard}>
+            <View style={styles.heroBadge}>
+              <Ionicons name="sparkles-outline" size={14} color={colors.accent} />
+              <Text style={styles.heroBadgeText}>Custom Workout Builder</Text>
+            </View>
+            <Text style={styles.heroTitle}>Build workouts with the full movement library</Text>
+            <Text style={styles.heroBody}>
+              Search exercises, apply default sets, add coaching notes, and line up your targets cleanly before you save.
+            </Text>
+          </View>
 
           {/* Day picker */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Add Days</Text>
-            <Text style={styles.sectionSubtitle}>Tap a day to add a workout slot for it.</Text>
+            <Text style={styles.sectionSubtitle}>
+              Tap a day to create a scheduled slot, or add an unscheduled workout below.
+            </Text>
             <View style={styles.dayRow}>
               {DAYS.map((day, i) => {
                 const active = selectedDays.has(day);
@@ -405,6 +417,41 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 80 },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: colors.accentLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    fontSize: typography.xs,
+    fontWeight: '700',
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  heroTitle: {
+    fontSize: typography.xl,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  heroBody: {
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
 
   // Day picker
   section: { gap: spacing.sm },

@@ -51,7 +51,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState<Category>('all');
   const searchRef = useRef<TextInput>(null);
-  const { customExercises } = useCustomExercises();
+  const { customExercises, addExercise } = useCustomExercises();
 
   const allExercises = useMemo(
     () => [...exerciseLibrary, ...customExercises],
@@ -72,7 +72,9 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
       result = result.filter(
         (e) =>
           e.name.toLowerCase().includes(q) ||
-          e.muscleGroups.some((m) => m.toLowerCase().includes(q))
+          e.muscleGroups.some((m) => m.toLowerCase().includes(q)) ||
+          e.equipment.some((item) => item.toLowerCase().includes(q)) ||
+          e.movementPattern.toLowerCase().includes(q)
       );
     }
     return result;
@@ -84,9 +86,26 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
     onClose();
   }
 
-  function handleCustom() {
+  async function handleCustom() {
     if (!searchQuery.trim()) return;
-    onSelect({ name: searchQuery.trim(), defaultSets: 3, defaultReps: 10, isCustom: true });
+    const customExercise: LibraryExercise = {
+      name: searchQuery.trim(),
+      category: 'strength',
+      muscleGroups: ['custom'],
+      equipment: ['custom'],
+      movementPattern: 'push',
+      defaultSets: 3,
+      defaultReps: 10,
+    };
+    if (!allExercises.some((e) => e.name.toLowerCase() === customExercise.name.toLowerCase())) {
+      await addExercise(customExercise).catch(() => {});
+    }
+    onSelect({
+      name: customExercise.name,
+      defaultSets: customExercise.defaultSets,
+      defaultReps: customExercise.defaultReps,
+      isCustom: true,
+    });
     reset();
     onClose();
   }
@@ -169,12 +188,13 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
           renderItem={({ item }) => {
             const accent = CATEGORY_COLORS[item.category] ?? colors.accent;
             const muscles = item.muscleGroups.slice(0, 2).map((m) => m.replace(/_/g, ' ')).join(', ');
+            const pattern = item.movementPattern.replace(/_/g, ' ');
             return (
               <TouchableOpacity style={styles.exerciseRow} onPress={() => handleSelect(item)}>
                 <View style={styles.exerciseInfo}>
                   <Text style={styles.exerciseName}>{item.name}</Text>
                   <Text style={styles.exerciseMeta}>
-                    {muscles} · {item.defaultSets}×{item.defaultReps}
+                    {muscles} · {pattern} · {item.defaultSets}×{item.defaultReps}
                   </Text>
                 </View>
                 <View style={[styles.catBadge, { backgroundColor: accent + '20' }]}>

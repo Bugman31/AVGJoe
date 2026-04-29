@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { prisma } from '../utils/prisma';
+import { ensureReviewerDemoData, isReviewerEmail } from '../services/reviewer.service';
 
 interface JwtPayload {
   sub: string;
@@ -42,12 +43,18 @@ export async function authMiddleware(
     },
   });
 
+  if (userWithProfile && isReviewerEmail(userWithProfile.email)) {
+    await ensureReviewerDemoData(userWithProfile.id, userWithProfile.email, userWithProfile.name);
+  }
+
   const user = userWithProfile
     ? {
         id: userWithProfile.id,
         email: userWithProfile.email,
         name: userWithProfile.name,
-        onboardingCompleted: userWithProfile.profile?.onboardingCompleted ?? false,
+        onboardingCompleted:
+          isReviewerEmail(userWithProfile.email) ||
+          (userWithProfile.profile?.onboardingCompleted ?? false),
         hasAnthropicKey: !!userWithProfile.anthropicApiKey,
         hasOpenAiKey: !!userWithProfile.openaiApiKey,
         serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),

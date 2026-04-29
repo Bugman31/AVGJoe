@@ -5,7 +5,8 @@ export type WelcomeVariant = 'intro' | 'updates' | 'reviewer';
 
 export const WELCOME_RELEASE_ID = '2026-04-25.mobile.welcome-v1';
 export const WELCOME_RELEASED_AT = '2026-04-25T00:00:00.000Z';
-export const REVIEWER_EMAIL = 'reviewer@avgjoe.com';
+export const REVIEWER_EMAILS = ['reviewer@avgjoe.com'] as const;
+export const REVIEWER_EMAIL = REVIEWER_EMAILS[0];
 
 const sessionDismissedUsers = new Set<string>();
 
@@ -14,7 +15,7 @@ function buildSeenKey(userId: string) {
 }
 
 export function getWelcomeVariant(user: User | null | undefined): WelcomeVariant {
-  if (user?.email?.toLowerCase() === REVIEWER_EMAIL) {
+  if (user?.email && REVIEWER_EMAILS.some((email) => email === user.email.toLowerCase())) {
     return 'reviewer';
   }
 

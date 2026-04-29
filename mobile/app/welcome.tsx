@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { colors, radii, spacing, typography } from '@/lib/theme';
 import { getWelcomeVariant, markWelcomeSeen, type WelcomeVariant } from '@/lib/welcome';
+import type { User } from '@/types';
 
 const FIRST_TIME_STEPS = [
   {
@@ -47,23 +48,23 @@ const RECENT_CHANGES = [
 
 const REVIEWER_STEPS = [
   {
-    title: '1. Open Build Program',
-    body: 'Use the Program tab or the Workout tab and choose Build Program. The AI section will summarize the training profile already saved on the account.',
-    icon: 'sparkles-outline',
+    title: '1. Review the seeded sample data',
+    body: 'This account already includes a current program, completed workouts, body logs, and progress history so the main screens are populated immediately.',
+    icon: 'layers-outline',
   },
   {
-    title: '2. Generate a program',
-    body: 'Tap Generate & Edit to create a full multi-week program, then review or tweak the generated weeks before saving.',
-    icon: 'calendar-outline',
+    title: '2. Start today’s workout and open AI Coach',
+    body: 'From Home or Program, launch the scheduled workout, review the suggested weights, log a set, and ask the coach questions like whether to increase load.',
+    icon: 'barbell-outline',
   },
   {
-    title: '3. Start a workout and review progress',
-    body: 'Launch the next planned workout, log a few sets, then visit Program, Progress, Body Log, and Apple Health import to review the core flows.',
-    icon: 'checkmark-done-outline',
+    title: '3. Evaluate the build and progress flows',
+    body: 'Visit Build Program for AI generation, then check Progress, Insights, Calendar, Body Log, and Apple Health import to review the end-to-end experience.',
+    icon: 'analytics-outline',
   },
 ];
 
-function variantCopy(variant: WelcomeVariant) {
+function variantCopy(variant: WelcomeVariant, user: User | null) {
   switch (variant) {
     case 'intro':
       return {
@@ -76,10 +77,10 @@ function variantCopy(variant: WelcomeVariant) {
     case 'reviewer':
       return {
         eyebrow: 'App Review Guide',
-        title: 'Welcome reviewer@avgjoe.com',
-        subtitle: 'This account is set up to make the main workout-building and tracking flows easy to review.',
+        title: 'Review account ready',
+        subtitle: `Signed in as ${user?.email ?? 'the App Review account'}. Sample data is preloaded so you can evaluate the core training flows right away.`,
         cards: REVIEWER_STEPS,
-        note: 'Apple Health import requires a native iOS build with HealthKit enabled. In Expo Go, those rows explain how to enable the feature.',
+        note: 'Suggested path: review Home and Program first, start the scheduled workout, then inspect Progress and Body Log. Apple Health import requires a native iOS build with HealthKit enabled.',
       };
     case 'updates':
     default:
@@ -100,7 +101,7 @@ export default function WelcomeScreen() {
   const [isContinuing, setIsContinuing] = useState(false);
 
   const variant = useMemo(() => getWelcomeVariant(user), [user]);
-  const copy = useMemo(() => variantCopy(variant), [variant]);
+  const copy = useMemo(() => variantCopy(variant, user), [variant, user]);
   const nextPath = typeof returnTo === 'string' && returnTo.length > 0 ? returnTo : '/(app)/home';
 
   if (isLoading) return <Spinner fullScreen />;

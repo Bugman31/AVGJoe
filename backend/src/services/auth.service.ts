@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma';
 import { env } from '../config/env';
 import { encrypt } from '../utils/crypto';
+import { ensureReviewerDemoData, isReviewerEmail } from './reviewer.service';
 
 export type AiProvider = 'anthropic' | 'openai';
 
@@ -83,8 +84,18 @@ export async function signup(
     select: { id: true, email: true, name: true, createdAt: true, updatedAt: true, anthropicApiKey: true, openaiApiKey: true, aiProvider: true },
   });
 
+  if (isReviewerEmail(user.email)) {
+    await ensureReviewerDemoData(user.id, user.email, user.name);
+  }
+
   const token = signToken(user.id);
-  return { token, user: { ...toSafeUser(user), onboardingCompleted: false } };
+  return {
+    token,
+    user: {
+      ...toSafeUser(user),
+      onboardingCompleted: isReviewerEmail(user.email),
+    },
+  };
 }
 
 export async function login(email: string, password: string): Promise<AuthResult> {
@@ -105,12 +116,17 @@ export async function login(email: string, password: string): Promise<AuthResult
     throw err;
   }
 
+  if (isReviewerEmail(user.email)) {
+    await ensureReviewerDemoData(user.id, user.email, user.name);
+  }
+
   const token = signToken(user.id);
   return {
     token,
     user: {
       ...toSafeUser(user),
-      onboardingCompleted: user.profile?.onboardingCompleted ?? false,
+      onboardingCompleted:
+        isReviewerEmail(user.email) || (user.profile?.onboardingCompleted ?? false),
     },
   };
 }
