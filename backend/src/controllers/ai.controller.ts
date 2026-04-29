@@ -3,6 +3,15 @@ import { z } from 'zod';
 import * as aiService from '../services/ai.service';
 import * as programService from '../services/program.service';
 
+const coachChatSchema = z.object({
+  sessionId: z.string(),
+  message: z.string().min(1).max(500),
+  conversationHistory: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().max(1000),
+  })).max(6).optional(),
+});
+
 const generateSchema = z.object({
   goal: z.string().min(10, 'Please describe your goal in at least 10 characters').max(500),
   fitnessLevel: z.enum(['beginner', 'intermediate', 'advanced', 'Beginner', 'Intermediate', 'Advanced']).optional(),
@@ -90,6 +99,51 @@ export async function generateProgram(
     });
 
     res.status(201).json({ program });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const setFeedbackSchema = z.object({
+  exerciseName: z.string().min(1).max(100),
+  setNumber: z.number().int().min(1),
+  targetSets: z.number().int().min(1),
+  targetRepMin: z.number().int().min(1),
+  targetRepMax: z.number().int().min(1),
+  actualWeight: z.number().min(0),
+  actualReps: z.number().int().min(0),
+  rpe: z.number().min(1).max(10),
+  previousSetSummary: z.string().max(200).optional(),
+  recommendationReason: z.string().max(300),
+  userGoal: z.string().max(100).optional(),
+});
+
+export async function coachChat(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const body = coachChatSchema.parse(req.body);
+    const reply = await aiService.generateCoachChat({
+      ...body,
+      userId: req.user.id,
+    });
+    res.json({ reply });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSetFeedback(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const body = setFeedbackSchema.parse(req.body);
+    const feedback = await aiService.generateSetFeedback(req.user.id, body);
+    res.json({ feedback });
   } catch (err) {
     next(err);
   }

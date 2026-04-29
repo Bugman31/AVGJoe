@@ -34,8 +34,37 @@ const programRateLimiter = rateLimit({
   message: { error: 'Too many program generation requests. Please try again in an hour.' },
 });
 
+const setFeedbackRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = req.user?.id ?? 'anonymous';
+    const ip = req.ip ?? 'unknown';
+    return `${ip}:${userId}:setfeedback`;
+  },
+  message: { error: 'Too many set feedback requests. Please try again later.' },
+});
+
 router.post('/generate', authMiddleware, aiRateLimiter, aiController.generate);
 router.post('/generate-program', authMiddleware, programRateLimiter, aiController.generateProgram);
 router.post('/preview-program', authMiddleware, programRateLimiter, aiController.previewProgram);
+router.post('/set-feedback', authMiddleware, setFeedbackRateLimiter, aiController.getSetFeedback);
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = req.user?.id ?? 'anonymous';
+    const ip = req.ip ?? 'unknown';
+    return `${ip}:${userId}:chat`;
+  },
+  message: { error: 'Too many chat requests. Try again later.' },
+});
+
+router.post('/coach-chat', authMiddleware, chatRateLimiter, aiController.coachChat);
 
 export default router;

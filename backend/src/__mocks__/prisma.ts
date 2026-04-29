@@ -8,8 +8,22 @@ export const prisma = {
   userProfile: {
     findUnique: jest.fn(),
   },
+  workoutSession: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+  },
+  plannedWorkout: {
+    findUnique: jest.fn(),
+  },
   workoutTemplate: {
     findMany: jest.fn(),
+    create: jest.fn(),
+  },
+  exercise: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    count: jest.fn(),
   },
   program: {
     create: jest.fn(),

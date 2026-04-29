@@ -1001,3 +1001,293 @@ fatigueLevel = 1-10 (1=fresh, 10=very fatigued)`;
     4000
   );
 }
+
+// ─────────────────────────────────────────────
+// 5. In-workout coach chat
+// ─────────────────────────────────────────────
+
+export interface CoachChatInput {
+  sessionId: string;
+  userId: string;
+  message: string;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+interface CoachChatPlannedExercise {
+  name?: string;
+  sets?: Array<{
+    setNumber?: number;
+    targetReps?: number | null;
+  }>;
+}
+
+function summarizeSessionVolume(
+  sets: Array<{ actualWeight?: number | null; actualReps?: number | null }>
+) {
+  return sets.reduce(
+    (sum, set) => sum + (set.actualWeight ?? 0) * (set.actualReps ?? 0),
+    0
+  );
+}
+
+function summarizeAverageRpe(sets: Array<{ rpe?: number | null }>) {
+  const rpes = sets.filter((set) => set.rpe != null).map((set) => set.rpe!);
+  if (rpes.length === 0) return 'N/A';
+  return (rpes.reduce((sum, rpe) => sum + rpe, 0) / rpes.length).toFixed(1);
+}
+
+function parsePlannedExercises(raw: string | null | undefined): CoachChatPlannedExercise[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function generateCoachChat(input: CoachChatInput): Promise<string> {
+  const { getSession } = await import('./session.service');
+  const [resolved, session, profile, previousSessions] = await Promise.all([
+    resolveAi(input.userId),
+    getSession(input.sessionId, input.userId),
+    prisma.userProfile.findUnique({
+      where: { userId: input.userId },
+      select: { primaryGoal: true },
+    }),
+    prisma.workoutSession.findMany({
+      where: {
+        userId: input.userId,
+        id: { not: input.sessionId },
+        completedAt: { not: null },
+      },
+      orderBy: { completedAt: 'desc' },
+      take: 2,
+      select: {
+        name: true,
+        completedAt: true,
+        preEnergyLevel: true,
+        postEnergyLevel: true,
+        sorenessLevel: true,
+        sets: {
+          select: {
+            exerciseName: true,
+            actualReps: true,
+            actualWeight: true,
+            rpe: true,
+            unit: true,
+          },
+        },
+      },
+    }),
+  ]);
+  const plannedWorkout = session.plannedWorkoutId
+    ? await prisma.plannedWorkout.findUnique({
+        where: { id: session.plannedWorkoutId },
+        select: { exercises: true },
+      })
+    : null;
+
+  // Build exercise summary from logged sets
+  const setsByExercise = new Map<string, { totalSets: number; weights: number[]; rpes: number[] }>();
+  for (const s of session.sets) {
+    const entry = setsByExercise.get(s.exerciseName) ?? { totalSets: 0, weights: [], rpes: [] };
+    entry.totalSets += 1;
+    if (s.actualWeight != null) entry.weights.push(s.actualWeight);
+    if (s.rpe != null) entry.rpes.push(s.rpe);
+    setsByExercise.set(s.exerciseName, entry);
+  }
+
+  const exerciseSummary = [...setsByExercise.entries()].map(([name, data]) => {
+    const avgWeight = data.weights.length
+      ? Math.round(data.weights.reduce((a, b) => a + b, 0) / data.weights.length)
+      : null;
+    const avgRpe = data.rpes.length
+      ? (data.rpes.reduce((a, b) => a + b, 0) / data.rpes.length).toFixed(1)
+      : null;
+    return `${name}: ${data.totalSets} set${data.totalSets !== 1 ? 's' : ''}${avgWeight != null ? `, avg ${avgWeight} lbs` : ''}${avgRpe != null ? `, avg RPE ${avgRpe}` : ''}`;
+  }).join('\n') || 'No sets logged yet.';
+
+  const totalVolume = summarizeSessionVolume(session.sets);
+  const allRpes = session.sets.filter((s) => s.rpe != null).map((s) => s.rpe!);
+  const avgRpe = summarizeAverageRpe(session.sets);
+  const durationMins = Math.round((Date.now() - session.startedAt.getTime()) / 60000);
+  const latestSet = [...session.sets]
+    .sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime())
+    .at(-1);
+  const currentExercise = latestSet?.exerciseName ?? 'Unknown';
+  const currentExerciseSets = session.sets
+    .filter((set) => set.exerciseName === currentExercise)
+    .sort((a, b) => a.setNumber - b.setNumber);
+  const currentExerciseHistory = currentExerciseSets.length > 0
+    ? currentExerciseSets
+        .map((set) => {
+          const weight = set.actualWeight != null ? `${set.actualWeight} ${set.unit}` : 'BW';
+          const reps = set.actualReps ?? '?';
+          const rpe = set.rpe != null ? `, RPE ${set.rpe}` : '';
+          return `Set ${set.setNumber}: ${reps} reps @ ${weight}${rpe}`;
+        })
+        .join(' | ')
+    : 'No sets logged for the current exercise yet.';
+  const highRpeCount = allRpes.filter((rpe) => rpe >= 9).length;
+
+  const plannedExercises = parsePlannedExercises(plannedWorkout?.exercises);
+  const targetRepsByExercise = new Map<string, Map<number, number>>();
+  plannedExercises.forEach((exercise) => {
+    if (!exercise?.name || !Array.isArray(exercise.sets)) return;
+    const setMap = new Map<number, number>();
+    exercise.sets.forEach((set) => {
+      if (typeof set?.setNumber === 'number' && typeof set?.targetReps === 'number') {
+        setMap.set(set.setNumber, set.targetReps);
+      }
+    });
+    targetRepsByExercise.set(exercise.name, setMap);
+  });
+
+  const missedRepSignals = session.sets
+    .map((set) => {
+      const targetReps = targetRepsByExercise.get(set.exerciseName)?.get(set.setNumber);
+      if (targetReps == null || set.actualReps == null || set.actualReps >= targetReps) return null;
+      return `${set.exerciseName} set ${set.setNumber}: target ${targetReps}, got ${set.actualReps}`;
+    })
+    .filter((signal): signal is string => signal != null)
+    .slice(0, 3);
+
+  const repDropSignals = [...setsByExercise.keys()]
+    .map((exerciseName) => {
+      const sets = session.sets
+        .filter((set) => set.exerciseName === exerciseName && set.actualReps != null)
+        .sort((a, b) => a.setNumber - b.setNumber);
+      if (sets.length < 2) return null;
+
+      for (let i = 1; i < sets.length; i += 1) {
+        const prev = sets[i - 1];
+        const next = sets[i];
+        if (prev.actualReps != null && next.actualReps != null && next.actualReps < prev.actualReps) {
+          return `${exerciseName}: reps dropped ${prev.actualReps}→${next.actualReps}${next.rpe != null ? ` by RPE ${next.rpe}` : ''}`;
+        }
+      }
+      return null;
+    })
+    .filter((signal): signal is string => signal != null)
+    .slice(0, 2);
+
+  const previousWorkoutSummary = previousSessions.length > 0
+    ? previousSessions
+        .map((previousSession) => {
+          const sessionVolume = summarizeSessionVolume(previousSession.sets);
+          const sessionAvgRpe = summarizeAverageRpe(previousSession.sets);
+          const fatigueBits = [
+            previousSession.preEnergyLevel != null ? `pre-energy ${previousSession.preEnergyLevel}/10` : null,
+            previousSession.postEnergyLevel != null ? `post-energy ${previousSession.postEnergyLevel}/10` : null,
+            previousSession.sorenessLevel != null ? `soreness ${previousSession.sorenessLevel}/10` : null,
+          ].filter(Boolean).join(', ');
+
+          return [
+            `${previousSession.name} (${previousSession.completedAt?.toISOString().slice(0, 10) ?? 'recent'})`,
+            `volume ${sessionVolume.toLocaleString()} lbs`,
+            `avg RPE ${sessionAvgRpe}`,
+            fatigueBits || null,
+          ].filter(Boolean).join(' | ');
+        })
+        .join('\n')
+    : 'No previous completed workouts available.';
+
+  const fatigueIndicators = [
+    session.preEnergyLevel != null ? `pre-workout energy ${session.preEnergyLevel}/10` : null,
+    `current avg RPE ${avgRpe}`,
+    highRpeCount > 0 ? `${highRpeCount} set${highRpeCount === 1 ? '' : 's'} at RPE 9+` : null,
+    previousSessions[0]?.postEnergyLevel != null
+      ? `last workout post-energy ${previousSessions[0].postEnergyLevel}/10`
+      : null,
+    previousSessions[0]?.sorenessLevel != null
+      ? `last workout soreness ${previousSessions[0].sorenessLevel}/10`
+      : null,
+  ].filter(Boolean).join(', ') || 'No fatigue indicators recorded yet.';
+
+  const missedRepSummary = missedRepSignals.length > 0
+    ? missedRepSignals.join(' | ')
+    : repDropSignals.length > 0
+    ? `No explicit target misses logged. Rep drop-off signals: ${repDropSignals.join(' | ')}`
+    : 'No missed reps or rep drop-offs detected yet.';
+  const userGoal = profile?.primaryGoal ?? 'general_fitness';
+
+  const systemPrompt = `You are an expert strength coach inside a workout tracking app. Answer questions about the user's CURRENT workout only. Be specific, direct, and brief (under 60 words).
+
+Rules:
+- Use the workout data below to give specific answers
+- If asked for a substitution, suggest ONE exercise that uses similar muscles
+- Do not give medical advice
+- Do not be generic — reference their actual numbers
+
+User goal: ${userGoal}
+Current workout: ${session.name}
+Current exercise: ${currentExercise}
+Current exercise set history:
+${currentExerciseHistory}
+Exercises completed so far:
+${exerciseSummary}
+Total volume: ${totalVolume} lbs
+Avg RPE: ${avgRpe}
+Duration: ${durationMins} min
+Fatigue indicators:
+${fatigueIndicators}
+Missed reps / drop-off signals:
+${missedRepSummary}
+Previous workouts:
+${previousWorkoutSummary}`;
+
+  const messages: { role: 'user' | 'assistant'; content: string }[] = [
+    ...(input.conversationHistory ?? []),
+    { role: 'user', content: input.message },
+  ];
+
+  const reply = await callAi(resolved, systemPrompt, messages, 200);
+  return reply.trim();
+}
+
+// ─────────────────────────────────────────────
+// Set feedback
+// ─────────────────────────────────────────────
+
+export interface SetFeedbackInput {
+  exerciseName: string;
+  setNumber: number;
+  targetSets: number;
+  targetRepMin: number;
+  targetRepMax: number;
+  actualWeight: number;
+  actualReps: number;
+  rpe: number;
+  previousSetSummary?: string;
+  recommendationReason: string;
+  userGoal?: string;
+}
+
+const SET_FEEDBACK_SYSTEM = `You are a strength coach inside a workout tracking app. Give short, specific feedback after a completed set.
+Rules:
+- Under 30 words total
+- Be specific to this exact set (mention reps, weight, or RPE)
+- Include the recommended next action if relevant
+- No generic motivation phrases
+- No medical advice
+- Return only the coach message, nothing else`;
+
+export async function generateSetFeedback(
+  userId: string,
+  input: SetFeedbackInput
+): Promise<string> {
+  const resolved = await resolveAi(userId);
+
+  const userPrompt = `Exercise: ${input.exerciseName} | Set ${input.setNumber} of ${input.targetSets}
+Target: ${input.targetRepMin}–${input.targetRepMax} reps | Actual: ${input.actualReps} reps @ ${input.actualWeight} lbs | RPE ${input.rpe}
+${input.previousSetSummary ? `Previous set: ${input.previousSetSummary}` : ''}
+System recommendation: ${input.recommendationReason}
+User goal: ${input.userGoal ?? 'general fitness'}`;
+
+  const raw = await callAi(resolved, SET_FEEDBACK_SYSTEM, [{ role: 'user', content: userPrompt }], 100);
+
+  // Enforce 30-word cap server-side
+  const words = raw.trim().split(/\s+/);
+  return words.length <= 30 ? raw.trim() : words.slice(0, 30).join(' ');
+}

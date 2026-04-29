@@ -18,6 +18,7 @@ import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/
 import { exerciseLibrary, type LibraryExercise } from '@/lib/exerciseLibrary';
 import { useCustomExercises } from '@/hooks/useCustomExercises';
 import { Button } from '@/components/ui/Button';
+import { ExerciseListItem } from '@/components/workouts/ExerciseListItem';
 
 type Category = 'all' | 'strength' | 'cardio' | 'mobility';
 
@@ -27,23 +28,6 @@ const CATEGORIES: { label: string; value: Category; icon: string }[] = [
   { label: 'Cardio', value: 'cardio', icon: 'heart-outline' },
   { label: 'Mobility', value: 'mobility', icon: 'leaf-outline' },
 ];
-
-const CATEGORY_COLORS: Record<string, string> = {
-  strength: colors.accent,
-  cardio: '#ef4444',
-  mobility: '#22c55e',
-};
-
-const PATTERN_ICONS: Record<string, string> = {
-  push: 'arrow-up-outline',
-  pull: 'arrow-down-outline',
-  squat: 'chevron-down-outline',
-  hinge: 'swap-vertical-outline',
-  carry: 'bag-outline',
-  core: 'ellipse-outline',
-  conditioning: 'flame-outline',
-  mobility: 'leaf-outline',
-};
 
 const MUSCLE_SUGGESTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads',
@@ -203,11 +187,12 @@ export default function LibraryScreen() {
         data={filtered}
         keyExtractor={(item) => item.name}
         renderItem={({ item }) => (
-          <ExerciseCard
+          <ExerciseListItem
             exercise={item}
             isCustom={isCustom(item.name)}
             onPress={() => router.push(`/(app)/exercise/${encodeURIComponent(item.name)}`)}
             onDelete={isCustom(item.name) ? () => confirmDelete(item) : undefined}
+            showMuscles
           />
         )}
         contentContainerStyle={styles.list}
@@ -331,60 +316,6 @@ export default function LibraryScreen() {
   );
 }
 
-interface ExerciseCardProps {
-  exercise: LibraryExercise;
-  isCustom: boolean;
-  onPress: () => void;
-  onDelete?: () => void;
-}
-
-function ExerciseCard({ exercise, isCustom, onPress, onDelete }: ExerciseCardProps) {
-  const accentColor = CATEGORY_COLORS[exercise.category] ?? colors.accent;
-  const patternIcon = PATTERN_ICONS[exercise.movementPattern] ?? 'fitness-outline';
-  const muscles = exercise.muscleGroups.slice(0, 3).map((m) => m.replace(/_/g, ' ')).join(', ');
-
-  return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.cardTop}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.exerciseName}>{exercise.name}</Text>
-          {isCustom && (
-            <View style={styles.customBadge}>
-              <Text style={styles.customBadgeText}>custom</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.cardRight}>
-          <View style={[styles.categoryBadge, { backgroundColor: accentColor + '20', borderColor: accentColor + '40' }]}>
-            <Text style={[styles.categoryBadgeText, { color: accentColor }]}>{exercise.category}</Text>
-          </View>
-          {onDelete && (
-            <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={16} color={colors.danger} />
-            </TouchableOpacity>
-          )}
-          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-        </View>
-      </View>
-
-      <View style={styles.cardMeta}>
-        <View style={styles.metaItem}>
-          <Ionicons name={patternIcon as any} size={12} color={colors.textMuted} />
-          <Text style={styles.metaText}>{exercise.movementPattern.replace(/_/g, ' ')}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Ionicons name="body-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.metaText} numberOfLines={1}>{muscles}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Ionicons name="list-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.metaText}>{exercise.defaultSets}×{exercise.defaultReps}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
@@ -438,33 +369,6 @@ const styles = StyleSheet.create({
   categoryPillText: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '500' },
   categoryPillTextActive: { color: '#fff' },
   list: { paddingHorizontal: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 8,
-  },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
-  cardTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  exerciseName: { fontSize: typography.md, fontWeight: '600', color: colors.text },
-  customBadge: {
-    backgroundColor: colors.accent + '20',
-    borderRadius: radii.full,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  customBadgeText: { fontSize: 9, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.4 },
-  cardRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  categoryBadge: {
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: radii.full, borderWidth: 1,
-  },
-  categoryBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: typography.xs, color: colors.textMuted, textTransform: 'capitalize' },
   empty: { paddingTop: 60, alignItems: 'center', gap: 12 },
   emptyText: { color: colors.textSecondary, fontSize: 14 },
   emptyAction: { color: colors.accent, fontSize: 14, fontWeight: '600' },

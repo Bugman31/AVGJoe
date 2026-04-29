@@ -212,6 +212,8 @@ model WorkoutSession {
   sorenessLevel      Int?      // 1-10
   completionScore    Float?
   performanceScore   Float?
+  workoutScore       Float?
+  scoreLabel         String?
   aiSummary          String?   // JSON string of structured AI analysis
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)

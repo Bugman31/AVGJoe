@@ -12,13 +12,16 @@ const startSessionSchema = z.object({
 });
 
 const logSetSchema = z.object({
-  exerciseId: z.string().cuid('Invalid exercise ID'),
+  exerciseId: z.string().min(1, 'Exercise ID is required'),
   exerciseName: z.string().min(1, 'Exercise name is required'),
   setNumber: z.number().int().min(1),
   actualReps: z.number().int().min(0).optional(),
   actualWeight: z.number().min(0).optional(),
   unit: z.string().default('lbs'),
   rpe: z.number().int().min(1).max(10).optional(),
+  targetRepMin: z.number().int().min(1).optional(),
+  targetRepMax: z.number().int().min(1).optional(),
+  progressionType: z.enum(['strength', 'hypertrophy', 'conditioning']).optional(),
 });
 
 const completeSessionSchema = z.object({
@@ -53,7 +56,8 @@ export async function listSessions(
     const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
     const includeSets =
       String(req.query.includeSets ?? 'false').toLowerCase() === 'true';
-    const result = await sessionService.listSessions(req.user.id, limit, offset, includeSets);
+    const { from, to } = req.query as { from?: string; to?: string };
+    const result = await sessionService.listSessions(req.user.id, limit, offset, includeSets, from, to);
     res.json(result);
   } catch (err) {
     next(err);
@@ -80,8 +84,8 @@ export async function logSet(
 ): Promise<void> {
   try {
     const body = logSetSchema.parse(req.body);
-    const set = await sessionService.logSet(req.params.id, req.user.id, body);
-    res.status(201).json({ set });
+    const { set, recommendation } = await sessionService.logSet(req.params.id, req.user.id, body);
+    res.status(201).json({ set, recommendation });
   } catch (err) {
     next(err);
   }

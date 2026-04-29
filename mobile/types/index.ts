@@ -204,6 +204,14 @@ export interface AiProgram {
 
 // ─── Sessions ──────────────────────────────────────────────────────────────
 
+export interface SetRecommendation {
+  nextWeight?: number;
+  nextReps?: number;
+  nextRestSeconds?: number;
+  action: 'increase' | 'decrease' | 'hold' | 'stop' | 'add_rest';
+  reason: string;
+}
+
 export interface SessionSet {
   id: string;
   sessionId: string;
@@ -215,6 +223,7 @@ export interface SessionSet {
   unit: string;
   rpe?: number | null;
   completedAt: string;
+  recommendation?: SetRecommendation;
 }
 
 export interface WorkoutSummary {
@@ -243,6 +252,8 @@ export interface WorkoutSession {
   sorenessLevel?: number | null;
   completionScore?: number | null;
   performanceScore?: number | null;
+  workoutScore?: number | null;
+  scoreLabel?: string | null;
   aiSummary?: string | null;
   sets?: SessionSet[];
   _count?: { sets: number };

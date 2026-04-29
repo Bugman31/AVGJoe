@@ -12,6 +12,7 @@ interface UseRestTimerReturn {
   setSelectedDuration: (d: RestTimerDuration) => void;
   start: (overrideDuration?: RestTimerDuration) => void;
   stop: () => void;
+  addTime: (seconds: number) => void;
 }
 
 export function useRestTimer(): UseRestTimerReturn {
@@ -67,5 +68,10 @@ export function useRestTimer(): UseRestTimerReturn {
     AsyncStorage.setItem(STORAGE_KEY, String(d));
   }, []);
 
-  return { remaining, isActive, selectedDuration, setSelectedDuration, start, stop };
+  const addTime = useCallback((seconds: number) => {
+    setRemaining((prev) => Math.max(prev + seconds, 1));
+    setIsActive(true);
+  }, []);
+
+  return { remaining, isActive, selectedDuration, setSelectedDuration, start, stop, addTime };
 }

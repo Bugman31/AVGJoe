@@ -183,7 +183,25 @@ export default function ProgressScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Progress</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>Progress</Text>
+              <View style={styles.titleButtons}>
+                <TouchableOpacity
+                  style={styles.insightsBtn}
+                  onPress={() => router.push('/(app)/progress/insights')}
+                >
+                  <Ionicons name="bulb-outline" size={16} color="#9B5CFF" />
+                  <Text style={styles.insightsBtnText}>Insights</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.calendarBtn}
+                  onPress={() => router.push('/(app)/progress/calendar')}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.calendarBtnText}>Calendar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Stats row */}
             {completedSessions.length > 0 && (
@@ -431,7 +449,33 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   listContent: { padding: 16, paddingBottom: TAB_BAR_BOTTOM_INSET, gap: 10 },
   header: { gap: 16, marginBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  titleButtons: { flexDirection: 'row', gap: 8 },
   title: { fontSize: 26, fontWeight: '700', color: theme.colors.text },
+  insightsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  insightsBtnText: { fontSize: 13, fontWeight: '600', color: '#9B5CFF' },
+  calendarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  calendarBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
 
   // Stats
   statsRow: { flexDirection: 'row', gap: 10 },

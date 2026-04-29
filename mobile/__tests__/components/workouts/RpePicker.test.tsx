@@ -8,11 +8,11 @@ describe('RpePicker', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('renders all 10 RPE options when visible', () => {
+  it('renders only the MVP 6-10 RPE options when visible', () => {
     const { getByTestId } = render(
-      <RpePicker visible onValue={null} onSelect={onSelect} onClose={onClose} />
+      <RpePicker visible value={null} onSelect={onSelect} onClose={onClose} />
     );
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 6; i <= 10; i++) {
       expect(getByTestId(`rpe-option-${i}`)).toBeTruthy();
     }
   });
@@ -39,6 +39,6 @@ describe('RpePicker', () => {
     const { queryByTestId } = render(
       <RpePicker visible={false} value={null} onSelect={onSelect} onClose={onClose} />
     );
-    expect(queryByTestId('rpe-option-1')).toBeNull();
+    expect(queryByTestId('rpe-option-6')).toBeNull();
   });
 });

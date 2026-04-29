@@ -33,7 +33,10 @@ interface UpdateTemplateData {
 
 export async function listTemplates(userId: string) {
   return prisma.workoutTemplate.findMany({
-    where: { userId, source: { not: 'preloaded' } },
+    where: {
+      userId,
+      source: { notIn: ['preloaded', 'session_runtime'] },
+    },
     include: {
       exercises: {
         orderBy: { orderIndex: 'asc' },

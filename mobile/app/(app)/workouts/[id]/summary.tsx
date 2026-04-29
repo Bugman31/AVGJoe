@@ -21,6 +21,14 @@ const RATING_COLORS: Record<string, string> = {
   'Off Day': '#ef4444',
 };
 
+const SCORE_LABEL_COLORS: Record<string, string> = {
+  'Excellent':    '#22c55e',
+  'Great':        '#6366f1',
+  'Solid':        '#f59e0b',
+  'Needs Work':   '#f97316',
+  'Recovery Day': '#ef4444',
+};
+
 const FATIGUE_LABELS: Record<string, string> = {
   low: 'Low fatigue — recovered well',
   moderate: 'Moderate fatigue — normal response',
@@ -65,6 +73,7 @@ export default function WorkoutSummaryScreen() {
   }
 
   const ratingColor = summary ? RATING_COLORS[summary.sessionRating] ?? theme.colors.primary : theme.colors.primary;
+  const scoreLabelColor = session?.scoreLabel ? SCORE_LABEL_COLORS[session.scoreLabel] ?? theme.colors.primary : theme.colors.primary;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -75,11 +84,19 @@ export default function WorkoutSummaryScreen() {
           <Ionicons name="checkmark-circle" size={28} color={theme.colors.success} />
         </View>
 
-        {/* Rating banner */}
-        {summary && (
-          <View style={[styles.ratingBanner, { borderColor: ratingColor + '40', backgroundColor: ratingColor + '15' }]}>
-            <Text style={[styles.ratingText, { color: ratingColor }]}>{summary.sessionRating}</Text>
+        {/* Workout score banner (deterministic) */}
+        {session?.workoutScore != null ? (
+          <View style={[styles.scoreBanner, { borderColor: scoreLabelColor + '40', backgroundColor: scoreLabelColor + '15' }]}>
+            <Text style={[styles.scoreBig, { color: scoreLabelColor }]}>{session.workoutScore.toFixed(1)}</Text>
+            <Text style={[styles.scoreBannerLabel, { color: scoreLabelColor }]}>{session.scoreLabel}</Text>
           </View>
+        ) : (
+          /* Fallback: AI rating banner for old sessions */
+          summary && (
+            <View style={[styles.ratingBanner, { borderColor: ratingColor + '40', backgroundColor: ratingColor + '15' }]}>
+              <Text style={[styles.ratingText, { color: ratingColor }]}>{summary.sessionRating}</Text>
+            </View>
+          )
         )}
 
         {/* Scores */}
@@ -190,6 +207,9 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40, gap: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   screenTitle: { fontSize: 26, fontWeight: '700', color: theme.colors.text },
+  scoreBanner: { borderRadius: 14, borderWidth: 1.5, paddingVertical: 20, alignItems: 'center', gap: 4 },
+  scoreBig: { fontSize: 64, fontWeight: '800', lineHeight: 72 },
+  scoreBannerLabel: { fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
   ratingBanner: { borderRadius: 12, borderWidth: 1.5, paddingVertical: 12, alignItems: 'center' },
   ratingText: { fontSize: 20, fontWeight: '800' },
   scoresRow: { flexDirection: 'row', gap: 12 },

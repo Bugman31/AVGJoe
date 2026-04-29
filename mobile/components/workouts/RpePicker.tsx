@@ -11,6 +11,8 @@ const RPE_LABELS: Record<number, string> = {
   10: 'Max',
 };
 
+const RPE_OPTIONS = [6, 7, 8, 9, 10] as const;
+
 interface RpePickerProps {
   visible: boolean;
   value: number | null;
@@ -28,7 +30,7 @@ export function RpePicker({ visible, value, onSelect, onClose }: RpePickerProps)
           <Text style={styles.subtitle}>How hard did that set feel?</Text>
 
           <View style={styles.grid}>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+            {RPE_OPTIONS.map((n) => (
               <TouchableOpacity
                 key={n}
                 style={[styles.cell, value === n && styles.cellActive]}
@@ -53,6 +55,8 @@ export function RpePicker({ visible, value, onSelect, onClose }: RpePickerProps)
     </Modal>
   );
 }
+
+export const RpeSelector = RpePicker;
 
 const styles = StyleSheet.create({
   overlay: {

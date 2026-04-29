@@ -58,3 +58,4 @@ e2e/playwright-report/
 # Misc
 *.log
 .cache/
+.expo/

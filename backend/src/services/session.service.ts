@@ -1,6 +1,7 @@
 import { prisma } from '../utils/prisma';
 import { generateWorkoutSummary } from './ai.service';
 import { markPlannedWorkoutComplete } from './program.service';
+import { recommend, type SetRecommendation } from './progression.service';
 
 interface StartSessionData {
   templateId?: string;
@@ -19,6 +20,9 @@ interface LogSetData {
   actualWeight?: number;
   unit?: string;
   rpe?: number;
+  targetRepMin?: number;
+  targetRepMax?: number;
+  progressionType?: 'strength' | 'hypertrophy' | 'conditioning';
 }
 
 interface CompleteSessionData {
@@ -33,6 +37,80 @@ interface ProgressPoint {
   totalVolume: number;
   reps: number;
   isPR: boolean;
+}
+
+const SESSION_RUNTIME_TEMPLATE_SOURCE = 'session_runtime';
+const CUID_REGEX = /^c[^\s-]{8,}$/i;
+
+function looksLikeCuid(value: string) {
+  return CUID_REGEX.test(value);
+}
+
+async function ensureRuntimeTemplateId(session: {
+  id: string;
+  userId: string;
+  templateId: string | null;
+  name: string;
+}) {
+  if (session.templateId) return session.templateId;
+
+  const runtimeTemplate = await prisma.workoutTemplate.create({
+    data: {
+      userId: session.userId,
+      name: `${session.name} Runtime`,
+      description: 'Hidden runtime template for active workout logging.',
+      source: SESSION_RUNTIME_TEMPLATE_SOURCE,
+    },
+    select: { id: true },
+  });
+
+  await prisma.workoutSession.update({
+    where: { id: session.id },
+    data: { templateId: runtimeTemplate.id },
+  });
+
+  return runtimeTemplate.id;
+}
+
+async function resolveExerciseIdForSession(
+  session: {
+    id: string;
+    userId: string;
+    templateId: string | null;
+    name: string;
+  },
+  data: LogSetData
+) {
+  if (looksLikeCuid(data.exerciseId)) {
+    const existing = await prisma.exercise.findFirst({
+      where: { id: data.exerciseId },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+  }
+
+  const templateId = await ensureRuntimeTemplateId(session);
+  const existingByName = await prisma.exercise.findFirst({
+    where: {
+      templateId,
+      name: data.exerciseName,
+    },
+    select: { id: true },
+  });
+
+  if (existingByName) return existingByName.id;
+
+  const orderIndex = await prisma.exercise.count({ where: { templateId } });
+  const created = await prisma.exercise.create({
+    data: {
+      templateId,
+      name: data.exerciseName,
+      orderIndex,
+    },
+    select: { id: true },
+  });
+
+  return created.id;
 }
 
 export async function startSession(userId: string, data: StartSessionData) {
@@ -53,11 +131,26 @@ export async function listSessions(
   userId: string,
   limit: number,
   offset: number,
-  includeSets = false
+  includeSets = false,
+  from?: string,
+  to?: string
 ) {
+  const dateFilter =
+    from || to
+      ? {
+          completedAt: {
+            not: null as null,
+            ...(from ? { gte: new Date(from) } : {}),
+            ...(to ? { lte: new Date(to) } : {}),
+          },
+        }
+      : {};
+
+  const whereClause = { userId, ...dateFilter };
+
   const [sessions, total] = await Promise.all([
     prisma.workoutSession.findMany({
-      where: { userId },
+      where: whereClause,
       orderBy: { startedAt: 'desc' },
       take: limit,
       skip: offset,
@@ -72,6 +165,8 @@ export async function listSessions(
         notes: true,
         completionScore: true,
         performanceScore: true,
+        workoutScore: true,
+        scoreLabel: true,
         preEnergyLevel: true,
         postEnergyLevel: true,
         sorenessLevel: true,
@@ -98,7 +193,7 @@ export async function listSessions(
         template: { select: { id: true, name: true } },
       },
     }),
-    prisma.workoutSession.count({ where: { userId } }),
+    prisma.workoutSession.count({ where: whereClause }),
   ]);
 
   return { sessions, total, limit, offset };
@@ -127,6 +222,13 @@ export async function getSession(id: string, userId: string) {
 export async function logSet(sessionId: string, userId: string, data: LogSetData) {
   const session = await prisma.workoutSession.findFirst({
     where: { id: sessionId, userId },
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      templateId: true,
+      completedAt: true,
+    },
   });
 
   if (!session) {
@@ -141,10 +243,12 @@ export async function logSet(sessionId: string, userId: string, data: LogSetData
     throw err;
   }
 
-  return prisma.sessionSet.create({
+  const resolvedExerciseId = await resolveExerciseIdForSession(session, data);
+
+  const set = await prisma.sessionSet.create({
     data: {
       sessionId,
-      exerciseId: data.exerciseId,
+      exerciseId: resolvedExerciseId,
       exerciseName: data.exerciseName,
       setNumber: data.setNumber,
       actualReps: data.actualReps,
@@ -153,6 +257,67 @@ export async function logSet(sessionId: string, userId: string, data: LogSetData
       rpe: data.rpe,
     },
   });
+
+  const recommendation: SetRecommendation = recommend({
+    exerciseName: data.exerciseName,
+    actualWeight: data.actualWeight,
+    actualReps: data.actualReps,
+    rpe: data.rpe,
+    targetRepMin: data.targetRepMin,
+    targetRepMax: data.targetRepMax,
+    progressionType: data.progressionType,
+  });
+
+  return { set, recommendation };
+}
+
+interface SetForScoring {
+  actualReps?: number | null;
+  rpe?: number | null;
+}
+
+function computeWorkoutScore(sets: SetForScoring[]): { workoutScore: number; scoreLabel: string } {
+  const setsWithReps = sets.filter((s) => s.actualReps != null && s.actualReps > 0);
+
+  // completionScore: did you log reps for all sets?
+  const completionScore = sets.length === 0 ? 10 : (setsWithReps.length / sets.length) * 10;
+
+  // performanceScore: no target data for MVP → neutral 7.5
+  const performanceScore = 7.5;
+
+  // effortScore: based on RPE
+  const setsWithRpe = sets.filter((s) => s.rpe != null);
+  let effortScore: number;
+  if (setsWithRpe.length === 0) {
+    effortScore = 7;
+  } else {
+    const total = setsWithRpe.reduce((sum, s) => {
+      const rpe = s.rpe!;
+      if (rpe >= 6 && rpe <= 9) return sum + 10;
+      if (rpe === 5 || rpe === 10) return sum + 7;
+      return sum + 5;
+    }, 0);
+    effortScore = total / setsWithRpe.length;
+  }
+
+  const restScore = 7;
+
+  const raw =
+    completionScore * 0.4 +
+    performanceScore * 0.3 +
+    effortScore * 0.2 +
+    restScore * 0.1;
+
+  const workoutScore = Math.min(10, Math.max(0, raw));
+
+  let scoreLabel: string;
+  if (workoutScore >= 9.0) scoreLabel = 'Excellent';
+  else if (workoutScore >= 8.0) scoreLabel = 'Great';
+  else if (workoutScore >= 7.0) scoreLabel = 'Solid';
+  else if (workoutScore >= 6.0) scoreLabel = 'Needs Work';
+  else scoreLabel = 'Recovery Day';
+
+  return { workoutScore, scoreLabel };
 }
 
 export async function completeSession(sessionId: string, userId: string, data: CompleteSessionData = {}) {
@@ -186,6 +351,8 @@ export async function completeSession(sessionId: string, userId: string, data: C
 
   const endTime = new Date();
   const durationMinutes = Math.round((endTime.getTime() - session.startedAt.getTime()) / 60000);
+
+  const { workoutScore, scoreLabel } = computeWorkoutScore(session.sets);
 
   // Generate AI summary (synchronous, 15s timeout fallback)
   let aiSummary: string | undefined;
@@ -225,6 +392,8 @@ export async function completeSession(sessionId: string, userId: string, data: C
       sorenessLevel: data.sorenessLevel,
       completionScore,
       performanceScore,
+      workoutScore,
+      scoreLabel,
       aiSummary,
     },
     include: {

@@ -20,7 +20,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,12 +30,15 @@ import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { RpePicker } from '@/components/workouts/RpePicker';
 import { PlateCalculatorModal } from '@/components/workouts/PlateCalculatorModal';
+import { AICoachCard } from '@/components/workouts/AICoachCard';
+import { RestTimerModal } from '@/components/workouts/RestTimerModal';
+import { WorkoutSummaryBar } from '@/components/workouts/WorkoutSummaryBar';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { saveWorkout } from '@/lib/healthkit';
 import { useRestTimer, REST_TIMER_OPTIONS, type RestTimerDuration } from '@/hooks/useRestTimer';
 import { useSetCompleteSound } from '@/hooks/useSetCompleteSound';
-import type { WorkoutSession, PlannedWorkout, PlannedExercise, PlannedExerciseSet, WorkoutSummary, UserProfile } from '@/types';
+import type { WorkoutSession, PlannedWorkout, PlannedExercise, PlannedExerciseSet, WorkoutSummary, UserProfile, SetRecommendation } from '@/types';
 
 /** Resolve a % prescription to an actual suggested weight using profile benchmarks */
 function calcSuggestedWeight(set: PlannedExerciseSet, profile: UserProfile | null): number | null {
@@ -86,6 +88,15 @@ interface LastSetData {
   unit: string;
 }
 
+interface AICoachState {
+  exerciseKey: string;   // 'planned-N' or 'extra-N'
+  exerciseIdx: number;
+  isExtra: boolean;
+  feedback: string | null;
+  recommendation: SetRecommendation;
+  isLoading: boolean;
+}
+
 export default function ActiveWorkoutScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const router = useRouter();
@@ -123,13 +134,34 @@ export default function ActiveWorkoutScreen() {
   const [newExSets, setNewExSets] = useState('3');
   const [newExReps, setNewExReps] = useState('');
 
+  // AI coach panel
+  const [aiCoach, setAiCoach] = useState<AICoachState | null>(null);
+
   // RPE picker state
   const [rpePickerKey, setRpePickerKey] = useState<string | null>(null);
   const [showPlateCalc, setShowPlateCalc] = useState(false);
 
+  // Elapsed workout time (counts up from session start)
+  const [elapsedSecs, setElapsedSecs] = useState(0);
+  useEffect(() => {
+    if (!session?.startedAt) return;
+    const startMs = new Date(session.startedAt).getTime();
+    // Set initial value immediately
+    setElapsedSecs(Math.floor((Date.now() - startMs) / 1000));
+    const id = setInterval(() => {
+      setElapsedSecs(Math.floor((Date.now() - startMs) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [session?.startedAt]);
+
   // Rest timer
   const restTimer = useRestTimer();
   const [showTimerSettings, setShowTimerSettings] = useState(false);
+  const [showRestModal, setShowRestModal] = useState(false);
+  const [restTotalDuration, setRestTotalDuration] = useState(90);
+  const [restAiTip, setRestAiTip] = useState('');
+  const [restExerciseName, setRestExerciseName] = useState('');
+  const [restSetInfo, setRestSetInfo] = useState('');
 
   // Sound
   const { play: playSound } = useSetCompleteSound();
@@ -248,9 +280,148 @@ export default function ActiveWorkoutScreen() {
     actualWeight?: number;
     unit: string;
     rpe?: number;
-  }) {
-    if (!sessionId) return;
-    await api.post(`/api/sessions/${sessionId}/sets`, payload);
+    targetRepMin?: number;
+    targetRepMax?: number;
+    progressionType?: 'strength' | 'hypertrophy' | 'conditioning';
+  }): Promise<{ recommendation: SetRecommendation } | null> {
+    if (!sessionId) return null;
+    try {
+      const res = await api.post<{ set: unknown; recommendation: SetRecommendation }>(
+        `/api/sessions/${sessionId}/sets`,
+        payload
+      );
+      return { recommendation: res.recommendation };
+    } catch {
+      return null;
+    }
+  }
+
+  function deriveRestAiTip(rpe: number | null, missedReps: boolean): string {
+    if (missedReps) return 'You missed reps — take extra time before your next attempt.';
+    if (rpe != null && rpe >= 9) return 'Your last set was near-maximal. Take the full rest before your next attempt.';
+    if (rpe != null && rpe <= 7) return "You felt strong. You can start a bit early if you feel ready.";
+    return 'Rest fully before your next set.';
+  }
+
+  async function handleLogSet(
+    exerciseKey: string,
+    exerciseIdx: number,
+    isExtra: boolean,
+    exerciseName: string,
+    setNumber: number,
+    unit: string,
+    targetRepMin?: number,
+    targetRepMax?: number
+  ) {
+    const key = isExtra
+      ? `${exerciseKey}-${setNumber}`
+      : `${exerciseIdx}-${setNumber}`;
+    const state = setStates[key];
+    if (!state || state.logged) return;
+
+    const actualReps = state.actualReps ? parseInt(state.actualReps, 10) : undefined;
+    const actualWeight = state.actualWeight ? parseFloat(state.actualWeight) : undefined;
+
+    // Mark logged optimistically
+    setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: true } }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    playSound();
+    restTimer.start();
+
+    // Prime the full-screen rest modal context
+    const totalSets = isExtra
+      ? (extraExercises.find((_, i) => `extra-${i}` === exerciseKey)?.sets ?? 3)
+      : (exercises[exerciseIdx]?.sets.length ?? 3);
+    const missedReps = !!(targetRepMin && actualReps != null && actualReps < targetRepMin);
+    setRestTotalDuration(restTimer.selectedDuration);
+    setRestAiTip(deriveRestAiTip(state.rpe, missedReps));
+    setRestExerciseName(exerciseName);
+    setRestSetInfo(`Set ${setNumber} of ${totalSets}`);
+
+    const result = await submitSet({
+      exerciseId: exerciseKey,
+      exerciseName,
+      setNumber,
+      actualReps,
+      actualWeight,
+      unit,
+      rpe: state.rpe ?? undefined,
+      targetRepMin,
+      targetRepMax,
+      progressionType: 'strength',
+    });
+
+    if (!result) {
+      setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: false } }));
+      restTimer.stop();
+      Toast.show({ type: 'error', text1: 'Failed to log set. Please try again.' });
+      return;
+    }
+
+    const { recommendation } = result;
+
+    // Show AI coach card (loading state)
+    setAiCoach({
+      exerciseKey,
+      exerciseIdx,
+      isExtra,
+      feedback: null,
+      recommendation,
+      isLoading: true,
+    });
+
+    // Fetch AI feedback (fire and forget; 5s timeout)
+    try {
+      const previousSet = setStates[isExtra ? `${exerciseKey}-${setNumber - 1}` : `${exerciseIdx}-${setNumber - 1}`];
+      const prevSummary = previousSet?.logged && previousSet.actualReps
+        ? `Set ${setNumber - 1}: ${previousSet.actualWeight ?? 'BW'} × ${previousSet.actualReps} @ RPE ${previousSet.rpe ?? '?'}`
+        : undefined;
+
+      const feedbackRes = await Promise.race([
+        api.post<{ feedback: string }>('/api/ai/set-feedback', {
+          exerciseName,
+          setNumber,
+          targetSets: isExtra
+            ? (extraExercises.find((_, i) => `extra-${i}` === exerciseKey)?.sets ?? 3)
+            : (exercises.find((_, i) => i === exerciseIdx)?.sets.length ?? 3),
+          targetRepMin: targetRepMin ?? 1,
+          targetRepMax: targetRepMax ?? 99,
+          actualWeight: actualWeight ?? 0,
+          actualReps: actualReps ?? 0,
+          rpe: state.rpe ?? 7,
+          previousSetSummary: prevSummary,
+          recommendationReason: recommendation.reason,
+          userGoal: userProfile?.primaryGoal,
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      ]);
+      setAiCoach((prev) =>
+        prev ? { ...prev, feedback: feedbackRes.feedback, isLoading: false } : null
+      );
+    } catch {
+      // On timeout/failure show the recommendation reason as fallback
+      setAiCoach((prev) =>
+        prev ? { ...prev, feedback: recommendation.reason, isLoading: false } : null
+      );
+    }
+  }
+
+  function adjustNextSet(exerciseIdx: number, currentSetNumber: number, weight?: number, reps?: number) {
+    const exercise = exercises[exerciseIdx];
+    if (!exercise) return;
+    const nextSetNumber = currentSetNumber + 1;
+    const nextKey = `${exerciseIdx}-${nextSetNumber}`;
+    const nextState = setStates[nextKey];
+    if (!nextState || nextState.logged) return;
+    setSetStates((prev) => ({
+      ...prev,
+      [nextKey]: {
+        ...prev[nextKey],
+        ...(weight != null ? { actualWeight: String(weight) } : {}),
+        ...(reps != null ? { actualReps: String(reps) } : {}),
+      },
+    }));
+    Toast.show({ type: 'success', text1: 'Next set updated', visibilityTime: 1500 });
   }
 
   function buildSetPayload(
@@ -361,6 +532,24 @@ export default function ActiveWorkoutScreen() {
 
   const exercises = plannedWorkout?.exercises ?? [];
 
+  // ── Derived summary stats (recomputed each render) ─────────────────────
+  const completedSets = Object.values(setStates).filter((s) => s.logged).length;
+  const totalSets =
+    exercises.reduce((sum, ex) => sum + ex.sets.length, 0) +
+    extraExercises.reduce((sum, ex) => sum + ex.sets, 0);
+  const totalVolume = Object.values(setStates)
+    .filter((s) => s.logged)
+    .reduce((sum, s) => {
+      const w = parseFloat(s.actualWeight) || 0;
+      const r = parseInt(s.actualReps, 10) || 0;
+      return sum + w * r;
+    }, 0);
+  const elapsedMins = Math.floor(elapsedSecs / 60);
+  const elapsedDisplay =
+    elapsedMins >= 60
+      ? `${Math.floor(elapsedMins / 60)}h ${elapsedMins % 60}m`
+      : `${elapsedMins}m`;
+
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -377,6 +566,12 @@ export default function ActiveWorkoutScreen() {
           {plannedWorkout?.name ?? session?.name ?? 'Workout'}
         </Text>
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => router.push(`/(app)/workouts/active/chat?sessionId=${sessionId}`)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowPlateCalc(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="barbell-outline" size={22} color={theme.colors.textSecondary} />
           </TouchableOpacity>
@@ -396,14 +591,66 @@ export default function ActiveWorkoutScreen() {
         </View>
       )}
 
-      {/* Rest timer banner */}
+      {/* Rest timer banner — tap to open full-screen modal */}
       {restTimer.isActive && (
-        <View style={styles.timerBanner}>
+        <TouchableOpacity style={styles.timerBanner} onPress={() => setShowRestModal(true)} activeOpacity={0.8}>
           <Ionicons name="timer-outline" size={16} color={theme.colors.primary} />
-          <Text style={styles.timerText}>Rest — {restTimer.remaining}s</Text>
-          <TouchableOpacity onPress={restTimer.stop} style={styles.timerSkip}>
+          <Text style={styles.timerText}>Rest — {restTimer.remaining}s  •  tap to expand</Text>
+          <TouchableOpacity onPress={restTimer.stop} style={styles.timerSkip} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.timerSkipText}>Skip</Text>
           </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
+      {/* ── Exercise progress strip ──────────────────────────────────── */}
+      {exercises.length > 0 && (
+        <View style={styles.progressStrip}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.progressStripContent}
+          >
+            {exercises.map((exercise, ei) => {
+              const skipKey = `planned-${ei}`;
+              const isSkipped = skippedExercises.has(skipKey);
+              const setKeys = exercise.sets.map((s) => `${ei}-${s.setNumber}`);
+              const loggedCount = setKeys.filter((k) => setStates[k]?.logged).length;
+              const isDone = isSkipped || loggedCount === exercise.sets.length;
+              const isInProgress = !isDone && loggedCount > 0;
+
+              return (
+                <View
+                  key={ei}
+                  style={[
+                    styles.progressPill,
+                    isDone && styles.progressPillDone,
+                    isInProgress && styles.progressPillActive,
+                  ]}
+                >
+                  {isDone ? (
+                    <Ionicons name="checkmark-circle" size={12} color={theme.colors.success} />
+                  ) : isInProgress ? (
+                    <View style={styles.progressDotActive} />
+                  ) : (
+                    <View style={styles.progressDot} />
+                  )}
+                  <Text
+                    style={[
+                      styles.progressPillName,
+                      isDone && styles.progressPillNameDone,
+                      isInProgress && styles.progressPillNameActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {exercise.name}
+                  </Text>
+                  <Text style={styles.progressPillMeta}>
+                    {loggedCount}/{exercise.sets.length}
+                  </Text>
+                </View>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 
@@ -414,7 +661,8 @@ export default function ActiveWorkoutScreen() {
             const isSkipped = skippedExercises.has(skipKey);
             const prevSets = lastSessionData[exercise.name];
             return (
-              <Card key={ei} style={isSkipped ? { ...styles.exerciseCard, ...styles.exerciseCardSkipped } : styles.exerciseCard}>
+              <React.Fragment key={ei}>
+              <Card style={isSkipped ? { ...styles.exerciseCard, ...styles.exerciseCardSkipped } : styles.exerciseCard}>
                 <View style={styles.exerciseHeader}>
                   <Text style={[styles.exerciseName, isSkipped && styles.exerciseNameSkipped]}>{exercise.name}</Text>
                   <TouchableOpacity onPress={() => toggleSkip(skipKey)} style={styles.skipBtn}>
@@ -443,13 +691,15 @@ export default function ActiveWorkoutScreen() {
                       <Text style={[styles.colLabel, styles.colSet]}>Set</Text>
                       <Text style={[styles.colLabel, styles.colTarget]}>Target</Text>
                       <Text style={[styles.colLabel, styles.colInput]}>Reps</Text>
-                      <Text style={[styles.colLabel, styles.colInput]}>Weight</Text>
+                      <Text style={[styles.colLabel, styles.colInput]}>Wt</Text>
                       <Text style={[styles.colLabel, styles.colRpe]}>RPE</Text>
+                      <View style={styles.colDone} />
                     </View>
 
                     {exercise.sets.map((set) => {
                       const key = `${ei}-${set.setNumber}`;
                       const state = setStates[key] ?? { actualReps: '', actualWeight: '', rpe: null, logged: false };
+                      const hasReps = !!state.actualReps && state.actualReps.trim() !== '';
                       return (
                         <View key={set.setNumber} style={[styles.setRow, state.logged && styles.setRowDone]}>
                           <Text style={[styles.colSet, styles.setNum]}>{set.setNumber}</Text>
@@ -486,12 +736,64 @@ export default function ActiveWorkoutScreen() {
                               {state.rpe ?? '—'}
                             </Text>
                           </TouchableOpacity>
+                          {/* Per-set Done button */}
+                          {state.logged ? (
+                            <View style={styles.doneCheck}>
+                              <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[styles.doneBtn, !hasReps && styles.doneBtnDisabled]}
+                              onPress={() => {
+                                if (!hasReps) return;
+                                handleLogSet(
+                                  `planned-${ei}`,
+                                  ei,
+                                  false,
+                                  exercise.name,
+                                  set.setNumber,
+                                  set.unit,
+                                  set.targetReps ?? undefined,
+                                  set.targetReps ?? undefined
+                                );
+                              }}
+                              disabled={!hasReps}
+                              testID={`done-btn-${ei}-${set.setNumber}`}
+                            >
+                              <Text style={styles.doneBtnText}>Done</Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                       );
                     })}
                   </>
                 )}
               </Card>
+
+              {/* AI Coach Card — shown after the exercise where the last set was logged */}
+              {aiCoach && !aiCoach.isExtra && aiCoach.exerciseIdx === ei && (
+                <AICoachCard
+                  feedback={aiCoach.feedback}
+                  recommendation={aiCoach.recommendation}
+                  onMoreRest={() => restTimer.addTime(30)}
+                  onAdjustNext={(weight, reps) => {
+                    const currentSetNumber = exercises[ei]?.sets.findIndex(
+                      (_, si) => {
+                        const k = `${ei}-${si + 1}`;
+                        return setStates[k]?.logged;
+                      }
+                    );
+                    // find the highest logged set number
+                    const loggedSetNumbers = exercises[ei]?.sets
+                      .map((s) => s.setNumber)
+                      .filter((sn) => setStates[`${ei}-${sn}`]?.logged) ?? [];
+                    const lastLogged = loggedSetNumbers.length > 0 ? Math.max(...loggedSetNumbers) : 0;
+                    adjustNextSet(ei, lastLogged, weight, reps);
+                  }}
+                  onDismiss={() => setAiCoach(null)}
+                />
+              )}
+            </React.Fragment>
             );
           })}
 
@@ -576,9 +878,19 @@ export default function ActiveWorkoutScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      <WorkoutSummaryBar
+        totalVolume={totalVolume}
+        completedSets={completedSets}
+        totalSets={totalSets}
+        elapsedDisplay={elapsedDisplay}
+        restTimerActive={restTimer.isActive}
+        restTimerRemaining={restTimer.remaining}
+        onRestTimerPress={() => (restTimer.isActive ? setShowRestModal(true) : restTimer.start())}
+      />
+
       {/* Floating notes FAB */}
       <TouchableOpacity
-        style={[styles.fab, restTimer.isActive && styles.fabWithTimer]}
+        style={styles.fab}
         onPress={() => setShowNotesModal(true)}
         testID="notes-fab"
       >
@@ -698,6 +1010,18 @@ export default function ActiveWorkoutScreen() {
         </View>
       </Modal>
 
+      {/* ── Full-screen Rest Timer ─────────────────────────────────── */}
+      <RestTimerModal
+        visible={showRestModal}
+        remaining={restTimer.remaining}
+        totalDuration={restTotalDuration}
+        exerciseName={restExerciseName}
+        setInfo={restSetInfo}
+        aiTip={restAiTip}
+        onAddTime={(secs) => restTimer.addTime(secs)}
+        onClose={() => setShowRestModal(false)}
+      />
+
       {/* ── Add Exercise modal ─────────────────────────────────────── */}
       <Modal visible={showAddExercise} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -813,8 +1137,69 @@ const styles = StyleSheet.create({
   timerOptionActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   timerOptionText: { fontSize: 16, fontWeight: '700', color: theme.colors.textSecondary },
   timerOptionTextActive: { color: theme.colors.primary },
+  // Exercise progress strip
+  progressStrip: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  progressStripContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    flexDirection: 'row',
+  },
+  progressPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.bg,
+    maxWidth: 140,
+  },
+  progressPillDone: {
+    borderColor: theme.colors.success + '50',
+    backgroundColor: theme.colors.success + '10',
+  },
+  progressPillActive: {
+    borderColor: theme.colors.primary + '60',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  progressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.border,
+  },
+  progressDotActive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.primary,
+  },
+  progressPillName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+  },
+  progressPillNameDone: {
+    color: theme.colors.success,
+  },
+  progressPillNameActive: {
+    color: theme.colors.primary,
+  },
+  progressPillMeta: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+  },
   // Content
-  content: { padding: 16, gap: 12, paddingBottom: 100 },
+  content: { padding: 16, gap: 12, paddingBottom: 160 },
   exerciseCard: { gap: 10 },
   exerciseName: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   exerciseNotes: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic' },
@@ -864,6 +1249,11 @@ const styles = StyleSheet.create({
   rpePillActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   rpePillText: { fontSize: 12, color: theme.colors.textMuted, fontWeight: '600' },
   rpePillTextActive: { color: theme.colors.primary },
+  colDone: { width: 46 },
+  doneBtn: { width: 46, height: 36, borderRadius: 8, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
+  doneBtnDisabled: { backgroundColor: theme.colors.border },
+  doneBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  doneCheck: { width: 46, alignItems: 'center', justifyContent: 'center' },
   condCard: { gap: 8 },
   condHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   condTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
@@ -871,9 +1261,27 @@ const styles = StyleSheet.create({
   condMeta: { fontSize: 12, color: theme.colors.textSecondary },
   finishBtn: { backgroundColor: theme.colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   finishBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  // Summary bar
+  summaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    gap: 4,
+  },
+  summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryValue: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  summaryValueMuted: { fontSize: 14, fontWeight: '400', color: theme.colors.textMuted },
+  summaryLabel: { fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryDivider: { width: 1, height: 28, backgroundColor: theme.colors.border },
+  summaryTimerBtn: { width: 52, height: 40, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 },
+  summaryTimerBtnActive: { borderColor: theme.colors.primary + '60', backgroundColor: theme.colors.primaryLight },
+  summaryTimerText: { fontSize: 12, fontWeight: '700', color: theme.colors.primary },
   // FAB
-  fab: { position: 'absolute', bottom: 96, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8 },
-  fabWithTimer: { bottom: 140 },
+  fab: { position: 'absolute', bottom: 150, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8 },
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: theme.colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 },
