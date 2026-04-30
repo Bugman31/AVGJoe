@@ -64,11 +64,18 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    const fieldErrors = (data as { fieldErrors?: Record<string, string[] | undefined> })?.fieldErrors;
+    const validationDetails = fieldErrors
+      ? Object.values(fieldErrors)
+          .flat()
+          .filter((value): value is string => !!value)
+          .join(' ')
+      : '';
     const msg =
       (data as { error?: string; message?: string })?.error ||
       (data as { error?: string; message?: string })?.message ||
       `Request failed: ${response.status}`;
-    throw new Error(msg);
+    throw new Error(validationDetails ? `${msg} ${validationDetails}`.trim() : msg);
   }
 
   return data as T;

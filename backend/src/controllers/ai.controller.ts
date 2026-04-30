@@ -10,6 +10,16 @@ const coachChatSchema = z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string().max(1000),
   })).max(6).optional(),
+  liveMetrics: z.object({
+    status: z.enum(['unsupported', 'waiting', 'live', 'stale', 'error']),
+    heartRate: z.number().min(1).max(260).nullable().optional(),
+    activeEnergyBurned: z.number().min(0).nullable().optional(),
+    heartRateTrend: z.enum(['rising', 'steady', 'falling', 'unknown']).optional(),
+    lastHeartRateSampleAt: z.string().datetime().nullable().optional(),
+    lastEnergySampleAt: z.string().datetime().nullable().optional(),
+    lastUpdatedAt: z.string().datetime().nullable().optional(),
+    errorMessage: z.string().max(200).nullable().optional(),
+  }).optional(),
 });
 
 const generateSchema = z.object({

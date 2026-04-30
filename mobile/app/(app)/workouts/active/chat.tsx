@@ -15,6 +15,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import {
+  startLiveWorkoutMetrics,
+  type LiveWorkoutMetricsSnapshot,
+} from '@/lib/healthkit';
 import { theme } from '@/lib/theme';
 
 interface Message {
@@ -24,8 +28,20 @@ interface Message {
 
 interface SessionContext {
   name: string;
-  sets: Array<unknown>;
+  startedAt: string;
+  sets?: Array<unknown>;
 }
+
+const DEFAULT_LIVE_METRICS: LiveWorkoutMetricsSnapshot = {
+  status: 'unsupported',
+  heartRate: null,
+  activeEnergyBurned: null,
+  heartRateTrend: 'unknown',
+  lastHeartRateSampleAt: null,
+  lastEnergySampleAt: null,
+  lastUpdatedAt: null,
+  errorMessage: null,
+};
 
 const SUGGESTED_PROMPTS = [
   'Should I increase weight?',
@@ -43,6 +59,8 @@ export default function CoachChatScreen() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [contextStrip, setContextStrip] = useState<{ name: string; setCount: number } | null>(null);
+  const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
+  const [liveMetrics, setLiveMetrics] = useState<LiveWorkoutMetricsSnapshot>(DEFAULT_LIVE_METRICS);
 
   const listRef = useRef<FlatList<Message>>(null);
 
@@ -55,9 +73,45 @@ export default function CoachChatScreen() {
           name: res.session.name,
           setCount: res.session.sets?.length ?? 0,
         });
+        setSessionStartedAt(res.session.startedAt);
       })
       .catch(() => {});
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionStartedAt) return;
+
+    return startLiveWorkoutMetrics(
+      { startDate: new Date(sessionStartedAt) },
+      setLiveMetrics,
+    );
+  }, [sessionStartedAt]);
+
+  function buildLiveMetricsPayload() {
+    if (liveMetrics.status === 'unsupported') return undefined;
+    return {
+      status: liveMetrics.status,
+      heartRate: liveMetrics.heartRate,
+      activeEnergyBurned: liveMetrics.activeEnergyBurned,
+      heartRateTrend: liveMetrics.heartRateTrend,
+      lastHeartRateSampleAt: liveMetrics.lastHeartRateSampleAt,
+      lastEnergySampleAt: liveMetrics.lastEnergySampleAt,
+      lastUpdatedAt: liveMetrics.lastUpdatedAt,
+      errorMessage: liveMetrics.errorMessage ?? null,
+    };
+  }
+
+  function buildContextMetricsText() {
+    if (liveMetrics.status === 'live' && liveMetrics.heartRate != null) {
+      const hr = `${liveMetrics.heartRate} bpm`;
+      const kcal = liveMetrics.activeEnergyBurned != null ? ` · ${liveMetrics.activeEnergyBurned} kcal` : '';
+      return ` · HR ${hr}${kcal}`;
+    }
+    if (liveMetrics.status === 'stale') return ' · live HR delayed';
+    if (liveMetrics.status === 'waiting') return ' · waiting for live HR';
+    if (liveMetrics.status === 'error') return ' · live HR unavailable';
+    return '';
+  }
 
   function getCoachErrorMessage(error: unknown) {
     if (error instanceof Error && error.message.includes('Too many chat requests')) {
@@ -80,6 +134,7 @@ export default function CoachChatScreen() {
         sessionId,
         message: userMsg.content,
         conversationHistory: messages.slice(-6),
+        liveMetrics: buildLiveMetricsPayload(),
       });
       setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }]);
     } catch (error) {
@@ -126,7 +181,7 @@ export default function CoachChatScreen() {
         <View style={styles.contextStrip}>
           <Ionicons name="barbell-outline" size={13} color={theme.colors.textMuted} />
           <Text style={styles.contextText}>
-            {contextStrip.name}{'  ·  '}{contextStrip.setCount} set{contextStrip.setCount !== 1 ? 's' : ''} logged
+            {contextStrip.name}{'  ·  '}{contextStrip.setCount} set{contextStrip.setCount !== 1 ? 's' : ''} logged{buildContextMetricsText()}
           </Text>
         </View>
       )}

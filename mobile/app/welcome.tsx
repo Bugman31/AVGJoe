@@ -13,36 +13,41 @@ import type { User } from '@/types';
 const FIRST_TIME_STEPS = [
   {
     title: 'Dial in your training profile',
-    body: 'Set your goal, experience level, equipment, split, and weekly schedule so AVGJoe can build around your real setup.',
+    body: 'Set your goal, experience level, equipment, split, and weekly schedule so AVGJoe can build around your real setup from day one.',
     icon: 'clipboard-outline',
   },
   {
-    title: 'Build your program',
-    body: 'Open Program or Build Program, generate with AI, then review and edit each workout before you save it.',
-    icon: 'sparkles-outline',
+    title: 'Build or pick a real program fast',
+    body: 'Use Build Program for a personalized AI plan, or browse ready-made programs with full weekly schedules and exercise details.',
+    icon: 'calendar-outline',
   },
   {
-    title: 'Train and log your sessions',
-    body: 'Start the next workout from Home or Program, log each set, then use Progress and Body Log to track how things are moving.',
+    title: 'Train with coaching built in',
+    body: 'Start workouts from Home or Program, log your sets, then use AI Coach, Progress, and Body Log to keep your training moving in the right direction.',
     icon: 'barbell-outline',
   },
 ];
 
 const RECENT_CHANGES = [
   {
-    title: 'Build Program is now the main creation flow',
-    body: 'Your saved training profile feeds the AI builder so you can generate a full program, review every week, and save it in one place.',
+    title: 'AI Coach now supports active workouts',
+    body: 'Ask questions mid-session, use quick prompts like weight increases, and get feedback based on the sets you have already logged.',
+    icon: 'chatbubble-ellipses-outline',
+  },
+  {
+    title: 'Custom workout and program building got easier',
+    body: 'The builder now has a cleaner movement picker, better aligned set/weight inputs, carried-forward targets, and a smoother way to create your own sessions.',
     icon: 'construct-outline',
   },
   {
-    title: 'Week Analysis is live',
-    body: 'After you finish a week, AVGJoe can review adherence, fatigue, and recommendations for what to adjust next.',
-    icon: 'analytics-outline',
+    title: 'Programs and Home are more reliable',
+    body: 'Built-in programs now include their full workout schedules, and Home refreshes when you return so program and workout changes show up right away.',
+    icon: 'home-outline',
   },
   {
-    title: 'Health and progress tools expanded',
-    body: 'You can now use Body Log, connect Apple Health in a native build, and import Apple Watch workouts from the Progress area.',
-    icon: 'watch-outline',
+    title: 'Progress tools keep expanding',
+    body: 'Use Week Analysis, Body Log, and Apple Health import in native iOS builds to get a clearer picture of training, recovery, and consistency.',
+    icon: 'analytics-outline',
   },
 ];
 
@@ -70,9 +75,9 @@ function variantCopy(variant: WelcomeVariant, user: User | null) {
       return {
         eyebrow: 'First Workout Starts Here',
         title: "Welcome to Average Joe's Workout Tracker",
-        subtitle: "Here's the fastest way to get from setup to your first real training week.",
+        subtitle: "Here's the fastest way to get from setup to a real program, your first workout, and coaching that helps while you train.",
         cards: FIRST_TIME_STEPS,
-        note: 'Tip: if you change your training profile later, head back to Build Program to generate a new plan that matches it.',
+        note: 'Tip: if your schedule, equipment, or goal changes later, go back to Build Program and regenerate a plan that matches your new setup.',
       };
     case 'reviewer':
       return {
@@ -85,9 +90,9 @@ function variantCopy(variant: WelcomeVariant, user: User | null) {
     case 'updates':
     default:
       return {
-        eyebrow: "What's New on April 25, 2026",
+        eyebrow: "What's New on April 30, 2026",
         title: "Recent updates in Average Joe's",
-        subtitle: 'A few important changes landed since earlier builds, and these are the ones worth knowing before you train.',
+        subtitle: 'A few useful upgrades landed since earlier builds, especially around active workouts, custom training, and program reliability.',
         cards: RECENT_CHANGES,
         note: "You can reopen this screen any time from Profile -> Welcome & What's New.",
       };

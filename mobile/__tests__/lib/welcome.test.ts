@@ -24,13 +24,13 @@ describe('welcome helpers', () => {
     expect(getWelcomeVariant({ id: 'u1', email: REVIEWER_EMAIL, name: 'Reviewer', onboardingCompleted: true })).toBe('reviewer');
   });
 
-  it('classifies users created on or after April 25, 2026 as first-time users', () => {
+  it('classifies users created on or after April 30, 2026 as first-time users', () => {
     expect(getWelcomeVariant({
       id: 'u2',
       email: 'new@avgjoe.com',
       name: 'New User',
       onboardingCompleted: true,
-      createdAt: '2026-04-25T12:00:00.000Z',
+      createdAt: '2026-04-30T12:00:00.000Z',
     })).toBe('intro');
   });
 

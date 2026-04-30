@@ -29,6 +29,7 @@ interface SetState {
 export default function StartWorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const goHome = () => router.replace('/(app)/home');
   const { startSession, logSet, completeSession, isLoading: sessionLoading } = useSession();
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
@@ -60,7 +61,7 @@ export default function StartWorkoutScreen() {
         setSetStates(states);
       } catch (err) {
         Toast.show({ type: 'error', text1: 'Failed to start session' });
-        router.back();
+        goHome();
       } finally {
         setIsLoading(false);
       }
@@ -87,8 +88,9 @@ export default function StartWorkoutScreen() {
     try {
       await logSet(sessionId, payload);
       setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: true } }));
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to log set' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to log set';
+      Toast.show({ type: 'error', text1: 'Failed to log set', text2: message });
     }
   }
 
@@ -99,8 +101,9 @@ export default function StartWorkoutScreen() {
       await completeSession(sessionId, notes || undefined);
       Toast.show({ type: 'success', text1: 'Workout complete!' });
       router.replace(`/(app)/workouts/${sessionId}/summary`);
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to complete session' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to complete session';
+      Toast.show({ type: 'error', text1: 'Failed to complete session', text2: message });
       setIsCompleting(false);
     }
   }
@@ -110,7 +113,7 @@ export default function StartWorkoutScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Ionicons name="arrow-back" size={24} color={colors.text} onPress={() => router.back()} />
+        <Ionicons name="arrow-back" size={24} color={colors.text} onPress={goHome} />
         <Text style={styles.title} numberOfLines={1}>{template.name}</Text>
       </View>
 

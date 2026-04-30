@@ -19,9 +19,10 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import DraggableFlatList, {
@@ -41,6 +42,16 @@ const DAYS_ORDERED = [
   'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
 ];
 const DAY_ABBREV = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const GENERATING_STAGES = [
+  'Analyzing your training profile…',
+  'Designing program structure…',
+  'Building week-by-week workouts…',
+  'Setting exercises and rep schemes…',
+  'Calculating weights from your benchmarks…',
+  'Applying progressive overload…',
+  'Almost done…',
+];
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -914,6 +925,7 @@ function DayCard({
 
 export default function BuildProgramScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { program: activeProgram } = useActiveProgram();
   const [pickerTarget, setPickerTarget] = useState<{
     weekIdx: number;
@@ -927,6 +939,45 @@ export default function BuildProgramScreen() {
   const [totalWeeks, setTotalWeeks] = useState(4);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Generation progress
+  const [generatingStage, setGeneratingStage] = useState(0);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // Block back navigation while AI is generating
+  useEffect(() => {
+    if (!isGenerating) return;
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      e.preventDefault();
+      Alert.alert(
+        'Generation in Progress',
+        'Your program is being built. Please wait until it finishes.',
+        [{ text: 'OK' }]
+      );
+    });
+    return unsubscribe;
+  }, [isGenerating, navigation]);
+
+  // Cycle stage messages and animate progress bar during generation
+  useEffect(() => {
+    if (!isGenerating) {
+      setGeneratingStage(0);
+      progressAnim.setValue(0);
+      return;
+    }
+    Animated.timing(progressAnim, {
+      toValue: 0.88,
+      duration: 32000,
+      useNativeDriver: false,
+    }).start();
+    const interval = setInterval(() => {
+      setGeneratingStage((s) => Math.min(s + 1, GENERATING_STAGES.length - 1));
+    }, 4500);
+    return () => {
+      clearInterval(interval);
+      progressAnim.stopAnimation();
+    };
+  }, [isGenerating]);
 
   // Step 2 state
   const [weeks, setWeeks] = useState<WeekData[]>([]);
@@ -1210,6 +1261,33 @@ export default function BuildProgramScreen() {
           onOpenExercisePicker={openExercisePicker}
         />
       )}
+
+      {/* Full-screen generation overlay */}
+      {isGenerating && (
+        <View style={styles.genOverlay}>
+          <View style={styles.genCard}>
+            <Ionicons name="sparkles" size={36} color={colors.accent} style={styles.genIcon} />
+            <Text style={styles.genTitle}>Building Your Program</Text>
+            <Text style={styles.genStage}>{GENERATING_STAGES[generatingStage]}</Text>
+
+            <View style={styles.genTrack}>
+              <Animated.View
+                style={[
+                  styles.genFill,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.genHint}>Usually takes 20–40 seconds</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1230,6 +1308,57 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text },
   headerStep: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 1 },
+
+  // Generation overlay
+  genOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  genCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    width: '80%',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  genIcon: { marginBottom: spacing.xs },
+  genTitle: {
+    fontSize: typography.xl,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  genStage: {
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    minHeight: 40,
+  },
+  genTrack: {
+    width: '100%',
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: radii.full,
+    overflow: 'hidden',
+    marginTop: spacing.xs,
+  },
+  genFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
+    borderRadius: radii.full,
+  },
+  genHint: {
+    fontSize: typography.xs,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
 });
 
 // Step 1

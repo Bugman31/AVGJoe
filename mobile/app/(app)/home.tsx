@@ -87,8 +87,8 @@ export default function HomeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      loadSessionData();
-    }, [])
+      void Promise.all([reload(), loadSessionData()]);
+    }, [reload])
   );
 
   async function onRefresh() {

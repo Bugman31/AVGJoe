@@ -35,6 +35,19 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@/lib/healthkit', () => ({
   saveWorkout: jest.fn().mockResolvedValue(undefined),
+  startLiveWorkoutMetrics: jest.fn((_: unknown, onUpdate: (snapshot: unknown) => void) => {
+    onUpdate({
+      status: 'live',
+      heartRate: 128,
+      activeEnergyBurned: 42,
+      heartRateTrend: 'rising',
+      lastHeartRateSampleAt: new Date().toISOString(),
+      lastEnergySampleAt: new Date().toISOString(),
+      lastUpdatedAt: new Date().toISOString(),
+      errorMessage: null,
+    });
+    return jest.fn();
+  }),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -145,6 +158,17 @@ describe('ActiveWorkout — Previous session data (Feature 7)', () => {
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('last-exercise/Bench%20Press')
     );
+  });
+});
+
+describe('ActiveWorkout — Live Apple Health metrics (Phase A)', () => {
+  it('renders the live metric strip when live HealthKit data is available', async () => {
+    const { findByText } = render(<ActiveWorkoutScreen />);
+
+    expect(await findByText('Live Apple Health')).toBeTruthy();
+    expect(await findByText('128 bpm')).toBeTruthy();
+    expect(await findByText('42 kcal')).toBeTruthy();
+    expect(await findByText('HR rising')).toBeTruthy();
   });
 });
 

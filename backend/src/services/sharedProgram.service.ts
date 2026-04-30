@@ -192,13 +192,10 @@ export async function enrollInProgram(
     [key: string]: unknown;
   },
 ) {
-  // Check for existing enrollment
-  const existing = await prisma.programEnrollment.findFirst({
+  // Remove any previous enrollment so the user can re-enroll (restart the program)
+  await prisma.programEnrollment.deleteMany({
     where: { userId, sharedProgramId },
   });
-  if (existing) {
-    throw makeError('Already enrolled in this program', 400);
-  }
 
   const totalWeeks = typeof sharedProgram.durationWeeks === 'number'
     ? sharedProgram.durationWeeks

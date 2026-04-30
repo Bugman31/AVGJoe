@@ -320,7 +320,7 @@ interface AiGeneratedProgram {
   workouts: AiPlannedWorkout[];
 }
 
-// ── Step 1 schema: program skeleton (no workouts) ──
+// ── Step 1 schema: program skeleton ──
 
 interface AiProgramStructure {
   programName: string;
@@ -336,6 +336,17 @@ interface AiProgramStructure {
 interface AiWeekWorkouts {
   weekNumber: number;
   workouts: AiPlannedWorkout[];
+}
+
+function formatPreferredSplit(split: string | undefined): string {
+  switch (split) {
+    case 'push_pull_legs': return 'Push/Pull/Legs';
+    case 'upper_lower': return 'Upper/Lower';
+    case 'full_body': return 'Full Body';
+    case 'body_part': return 'Body Part Split';
+    case 'athlete': return 'Coach Selected';
+    default: return split ?? 'Auto';
+  }
 }
 
 function buildStructureSystemPrompt(): string {
@@ -361,7 +372,8 @@ Output ONLY valid JSON matching this exact schema — no text outside the JSON:
 Do not include any workout details. Return ONLY the JSON object. Do not use markdown code blocks.`;
 }
 
-function buildStructureUserPrompt(profile: OnboardingData): string {
+function buildStructureUserPrompt(profile: OnboardingData, customization?: string, requestedWeeks?: number): string {
+  const unit = profile.unitSystem;
   const lines: string[] = [
     'Design the training program structure for this athlete:',
     '',
@@ -370,29 +382,45 @@ function buildStructureUserPrompt(profile: OnboardingData): string {
     `Experience Level: ${profile.experienceLevel}`,
     `Training Days Per Week: ${profile.daysPerWeek}`,
     `Session Duration: ${profile.sessionDurationMins} minutes`,
-    `Preferred Split: ${profile.preferredSplit}`,
+    `Preferred Split: ${formatPreferredSplit(profile.preferredSplit)}`,
     `Available Equipment: ${profile.availableEquipment.join(', ') || 'bodyweight only'}`,
+    `Workout Environment: ${profile.workoutEnvironment}`,
     `Movement Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
     `Injury Flags: ${profile.injuryFlags.join(', ') || 'none'}`,
-    `Workout Environment: ${profile.workoutEnvironment}`,
     `Priority Areas: ${profile.priorityAreas.join(', ') || 'general'}`,
     `Program Style: ${profile.programStyle}`,
-    `Unit System: ${profile.unitSystem}`,
+    `Unit System: ${unit}`,
   ];
 
-  if (profile.bodyweight) lines.push(`Bodyweight: ${profile.bodyweight} ${profile.unitSystem}`);
-  if (profile.benchmarkSquat) lines.push(`Squat Best: ${profile.benchmarkSquat} ${profile.unitSystem}`);
-  if (profile.benchmarkDeadlift) lines.push(`Deadlift Best: ${profile.benchmarkDeadlift} ${profile.unitSystem}`);
-  if (profile.benchmarkBench) lines.push(`Bench Press Best: ${profile.benchmarkBench} ${profile.unitSystem}`);
-  if (profile.benchmarkPress) lines.push(`Overhead Press Best: ${profile.benchmarkPress} ${profile.unitSystem}`);
-  if (profile.benchmarkPullups) lines.push(`Pull-Up Max Reps: ${profile.benchmarkPullups}`);
+  if (profile.bodyweight) lines.push(`Bodyweight: ${profile.bodyweight} ${unit}`);
+
+  const hasBenchmarks = profile.benchmarkBench || profile.benchmarkSquat || profile.benchmarkDeadlift || profile.benchmarkPress || profile.benchmarkPullups;
+  if (hasBenchmarks) {
+    lines.push('', 'Strength Benchmarks:');
+    if (profile.benchmarkBench) lines.push(`  Bench Press 1RM: ${profile.benchmarkBench} ${unit}`);
+    if (profile.benchmarkSquat) lines.push(`  Squat 1RM: ${profile.benchmarkSquat} ${unit}`);
+    if (profile.benchmarkDeadlift) lines.push(`  Deadlift 1RM: ${profile.benchmarkDeadlift} ${unit}`);
+    if (profile.benchmarkPress) lines.push(`  Overhead Press 1RM: ${profile.benchmarkPress} ${unit}`);
+    if (profile.benchmarkPullups) lines.push(`  Pull-Up Max Reps: ${profile.benchmarkPullups} reps`);
+  }
+
+  if (requestedWeeks) lines.push('', `Requested Program Length: ${requestedWeeks} weeks`);
+  if (customization) lines.push('', `Athlete Notes / Customization: "${customization}"`);
 
   lines.push('', 'Return ONLY the JSON object — no markdown, no explanation.');
   return lines.join('\n');
 }
 
 function buildWeekSystemPrompt(): string {
-  return `You are an expert certified strength and conditioning coach. Generate the workouts for a specific week of a training program.
+  return `You are an expert certified strength and conditioning coach. Generate the complete workouts for a specific week of a training program.
+
+IMPORTANT — target weights:
+- Set targetWeight for every exercise where a barbell, dumbbell, or machine is involved
+- Main compound lifts (squat, bench press, deadlift, overhead press, barbell row): use 65-85% of the athlete's provided 1RM
+- Accessory exercises (dumbbell curls, tricep pushdowns, lateral raises, etc.): estimate a realistic working weight based on the athlete's overall strength level
+- Bodyweight exercises (pull-ups, dips, push-ups, lunges): set targetWeight to null
+- Use the athlete's unit system (lbs or kg) consistently for every set
+- Apply progressive overload between weeks as described in the progression rules
 
 Output ONLY valid JSON matching this exact schema:
 {
@@ -414,7 +442,7 @@ Output ONLY valid JSON matching this exact schema:
             {
               "setNumber": 1,
               "targetReps": 5,
-              "targetWeight": null,
+              "targetWeight": 135,
               "rpeTarget": "7-8",
               "unit": "lbs"
             }
@@ -435,203 +463,81 @@ Do not include any text outside the JSON object. Do not use markdown code blocks
 function buildWeekUserPrompt(
   profile: OnboardingData,
   structure: AiProgramStructure,
-  weekNumber: number
+  weekNumber: number,
+  totalWeeks: number,
+  customization?: string
 ): string {
+  const unit = profile.unitSystem;
   const lines = [
-    `Generate workouts for WEEK ${weekNumber} of ${structure.totalWeeks} of the "${structure.programName}" program.`,
+    `Generate workouts for WEEK ${weekNumber} of ${totalWeeks} of the "${structure.programName}" program.`,
     '',
-    'Program structure:',
+    '── Program structure ──',
     `Split: ${structure.weeklyStructure.split}`,
-    `Training days: ${structure.weeklyStructure.days.join(', ')}`,
+    `Training days this week: ${structure.weeklyStructure.days.join(', ')}`,
+    `Main lift progression: ${structure.progressionRules.mainLifts}`,
+    `Accessory progression: ${structure.progressionRules.accessories}`,
     '',
-    'Progression rules:',
-    `Main lifts: ${structure.progressionRules.mainLifts}`,
-    `Accessories: ${structure.progressionRules.accessories}`,
-    '',
-    'Athlete profile:',
+    '── Athlete profile ──',
     `Primary Goal: ${profile.primaryGoal}`,
     `Experience Level: ${profile.experienceLevel}`,
     `Session Duration: ${profile.sessionDurationMins} minutes`,
     `Available Equipment: ${profile.availableEquipment.join(', ') || 'bodyweight only'}`,
-    `Unit System: ${profile.unitSystem}`,
     `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
+    `Unit System: ${unit}`,
   ];
 
-  if (profile.benchmarkSquat) lines.push(`Squat Best: ${profile.benchmarkSquat} ${profile.unitSystem}`);
-  if (profile.benchmarkDeadlift) lines.push(`Deadlift Best: ${profile.benchmarkDeadlift} ${profile.unitSystem}`);
-  if (profile.benchmarkBench) lines.push(`Bench Press Best: ${profile.benchmarkBench} ${profile.unitSystem}`);
+  if (profile.bodyweight) lines.push(`Bodyweight: ${profile.bodyweight} ${unit}`);
 
-  lines.push(
-    '',
-    `This is week ${weekNumber} of ${structure.totalWeeks} — apply progressive overload appropriate for this week's position.`,
-    'Return ONLY the JSON object.'
-  );
+  const hasBenchmarks = profile.benchmarkBench || profile.benchmarkSquat || profile.benchmarkDeadlift || profile.benchmarkPress || profile.benchmarkPullups;
+  if (hasBenchmarks) {
+    lines.push('', '── Strength benchmarks — use these to set targetWeight ──');
+    if (profile.benchmarkBench) {
+      lines.push(`Bench Press 1RM: ${profile.benchmarkBench} ${unit}  →  working range ${Math.round(profile.benchmarkBench * 0.70)}–${Math.round(profile.benchmarkBench * 0.82)} ${unit}`);
+    }
+    if (profile.benchmarkSquat) {
+      lines.push(`Squat 1RM: ${profile.benchmarkSquat} ${unit}  →  working range ${Math.round(profile.benchmarkSquat * 0.70)}–${Math.round(profile.benchmarkSquat * 0.82)} ${unit}`);
+    }
+    if (profile.benchmarkDeadlift) {
+      lines.push(`Deadlift 1RM: ${profile.benchmarkDeadlift} ${unit}  →  working range ${Math.round(profile.benchmarkDeadlift * 0.70)}–${Math.round(profile.benchmarkDeadlift * 0.82)} ${unit}`);
+    }
+    if (profile.benchmarkPress) {
+      lines.push(`Overhead Press 1RM: ${profile.benchmarkPress} ${unit}  →  working range ${Math.round(profile.benchmarkPress * 0.70)}–${Math.round(profile.benchmarkPress * 0.82)} ${unit}`);
+    }
+    if (profile.benchmarkPullups) {
+      lines.push(`Pull-Up Max Reps: ${profile.benchmarkPullups} reps (set targetWeight to null; use rep count to gauge difficulty)`);
+    }
+  } else {
+    lines.push('', 'No strength benchmarks provided — estimate appropriate working weights based on the athlete\'s experience level.');
+  }
+
+  const isDeload = totalWeeks >= 4 && weekNumber === totalWeeks;
+  if (isDeload) {
+    lines.push('', `Week ${weekNumber} is the DELOAD week. Reduce volume by ~30% and drop intensity to ~60% of 1RM. Fewer sets, lighter weights, same movements.`);
+  } else {
+    lines.push('', `Apply progressive overload for week ${weekNumber} of ${totalWeeks}. Each week should be slightly harder than the previous — more weight, more reps, or one extra set on a key lift.`);
+  }
+
+  if (customization) lines.push('', `Athlete notes: "${customization}"`);
+  lines.push('', 'Return ONLY the JSON object.');
   return lines.join('\n');
 }
 
-// ── Template-based generation helpers ──
-
-interface AiCustomization {
-  programName: string;
-  programDescription: string;
-  goalSummary: string;
-  exerciseSwaps?: Array<{ templateName: string; oldExercise: string; newExercise: string }>;
-  workoutNotes?: Array<{ templateName: string; coachNote: string }>;
-}
-
-const TRAINING_DAYS: Record<number, string[]> = {
-  1: ['Wednesday'],
-  2: ['Monday', 'Thursday'],
-  3: ['Monday', 'Wednesday', 'Friday'],
-  4: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
-  5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-  6: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-  7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-};
-
-function formatPreferredSplit(split: string | undefined): string {
-  switch (split) {
-    case 'push_pull_legs':
-      return 'Push/Pull/Legs';
-    case 'upper_lower':
-      return 'Upper/Lower';
-    case 'full_body':
-      return 'Full Body';
-    case 'body_part':
-      return 'Body Part Split';
-    case 'athlete':
-      return 'Coach Selected';
-    default:
-      return 'Auto';
-  }
-}
-
-function resolveProgramStructure(profile: OnboardingData): { templateNames: string[]; splitName: string } {
-  const days = Math.min(Math.max(profile.daysPerWeek, 1), 7);
-
-  switch (profile.preferredSplit) {
-    case 'push_pull_legs': {
-      if (days >= 5) {
-        return {
-          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Push Day', 'Pull Day'].slice(0, days),
-          splitName: 'Push/Pull/Legs',
-        };
-      }
-      if (days === 4) {
-        return {
-          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'],
-          splitName: 'Push/Pull/Legs',
-        };
-      }
-      if (days === 3) {
-        return {
-          templateNames: ['Push Day', 'Pull Day', 'Leg Day'],
-          splitName: 'Push/Pull/Legs',
-        };
-      }
-      if (days === 2) {
-        return {
-          templateNames: ['Push Day', 'Pull Day'],
-          splitName: 'Push/Pull',
-        };
-      }
-      return { templateNames: ['Push Day'], splitName: 'Push Day' };
-    }
-    case 'upper_lower': {
-      return {
-        templateNames: Array.from({ length: days }, (_, idx) => (idx % 2 === 0 ? 'Upper Body' : 'Leg Day')),
-        splitName: 'Upper/Lower',
-      };
-    }
-    case 'full_body': {
-      return {
-        templateNames: Array.from({ length: days }, (_, idx) => (idx % 2 === 0 ? 'Full Body A' : 'Full Body B')),
-        splitName: 'Full Body',
-      };
-    }
-    case 'body_part': {
-      const bodyPartTemplates = ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Push Day', 'Pull Day', 'Leg Day'];
-      return {
-        templateNames: bodyPartTemplates.slice(0, days),
-        splitName: 'Body Part Split',
-      };
-    }
-    case 'athlete':
-    default: {
-      if (days <= 3) {
-        return {
-          templateNames: ['Full Body A', 'Full Body B', 'Full Body A'].slice(0, days),
-          splitName: 'Full Body',
-        };
-      }
-      if (days === 4) {
-        return {
-          templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body'],
-          splitName: 'PPL + Upper',
-        };
-      }
-      return {
-        templateNames: ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Full Body A', 'Push Day', 'Pull Day'].slice(0, days),
-        splitName: 'Push/Pull/Legs',
-      };
-    }
-  }
-}
-
-type TemplateRow = Awaited<ReturnType<typeof prisma.workoutTemplate.findFirst>> & {
-  exercises: Array<{
-    name: string;
-    orderIndex: number;
-    notes: string | null;
-    sets: Array<{ setNumber: number; targetReps: number | null; targetWeight: number | null; unit: string }>;
-  }>;
-};
-
-function templateToWorkout(
-  template: NonNullable<TemplateRow>,
-  weekNumber: number,
-  totalWeeks: number,
-  dayOfWeek: string,
-  coachNote: string
-): AiPlannedWorkout {
-  const isDeloadWeek = totalWeeks >= 4 && weekNumber === totalWeeks;
-  const repBonus = isDeloadWeek ? Math.max(totalWeeks - 2, 0) : Math.min(weekNumber - 1, 3);
-
-  const exercises: AiPlannedExercise[] = template.exercises.map((ex) => {
-    let sets: AiPlannedExerciseSet[] = ex.sets.map((s) => ({
-      setNumber: s.setNumber,
-      targetReps: s.targetReps !== null ? s.targetReps + repBonus : null,
-      targetWeight: null,
-      rpeTarget: null,
-      unit: s.unit,
-    }));
-    // Deload week: drop to ~2/3 of sets
-    if (isDeloadWeek) {
-      sets = sets.slice(0, Math.max(2, Math.floor(sets.length * 0.67)));
-    }
-    return { name: ex.name, orderIndex: ex.orderIndex, notes: ex.notes ?? '', sets };
-  });
-
-  return {
-    weekNumber,
-    dayOfWeek,
-    name: isDeloadWeek ? `${template.name} (Deload)` : template.name,
-    focus: template.name,
-    estimatedDuration: isDeloadWeek ? 40 : 65,
-    warmup: [
-      { name: '5 min light cardio', duration: '5 min' },
-      { name: 'Dynamic mobility / activation', duration: '5 min' },
-    ],
-    exercises,
-    conditioning: null,
-    coachNotes: coachNote || (template.description ?? ''),
-  };
-}
-
-function validateAiCustomization(val: unknown): val is AiCustomization {
+function validateAiProgramStructure(val: unknown): val is AiProgramStructure {
   if (typeof val !== 'object' || val === null) return false;
   const v = val as Record<string, unknown>;
-  return typeof v.programName === 'string' && typeof v.goalSummary === 'string';
+  if (typeof v.programName !== 'string') return false;
+  if (typeof v.totalWeeks !== 'number') return false;
+  const ws = v.weeklyStructure as Record<string, unknown>;
+  if (!ws || !Array.isArray(ws.days) || ws.days.length === 0) return false;
+  return true;
+}
+
+function validateWeekWorkouts(val: unknown): val is AiWeekWorkouts {
+  if (typeof val !== 'object' || val === null) return false;
+  const v = val as Record<string, unknown>;
+  if (typeof v.weekNumber !== 'number') return false;
+  if (!Array.isArray(v.workouts) || v.workouts.length === 0) return false;
+  return true;
 }
 
 export async function generateProgram(
@@ -674,127 +580,39 @@ export async function generateProgram(
     unitSystem: profileRow.unitSystem,
   };
 
-  // Load preloaded seed templates matching the user's preferred split and schedule
-  const { templateNames, splitName } = resolveProgramStructure(profile);
-  const rawTemplates = await prisma.workoutTemplate.findMany({
-    where: { source: 'preloaded', name: { in: templateNames } },
-    include: {
-      exercises: {
-        orderBy: { orderIndex: 'asc' },
-        include: { sets: { orderBy: { setNumber: 'asc' } } },
-      },
-    },
-  });
+  // Step 1: Generate program structure (name, split, training days, progression rules)
+  const structure = await callAiWithRetry<AiProgramStructure>(
+    resolved,
+    buildStructureSystemPrompt(),
+    buildStructureUserPrompt(profile, customization, requestedWeeks),
+    validateAiProgramStructure,
+    1500
+  );
 
-  // Order templates to match templateNames sequence
-  const templates = templateNames
-    .map((n) => rawTemplates.find((t) => t.name === n))
-    .filter((t): t is NonNullable<typeof t> => t !== undefined);
+  const totalWeeks = Math.min(Math.max(requestedWeeks ?? structure.totalWeeks ?? 4, 1), 16);
 
-  if (templates.length === 0) {
-    const err = new Error('Seed templates not found. Please contact support.') as Error & { statusCode: number };
-    err.statusCode = 500;
-    throw err;
-  }
+  // Step 2: Generate each week's full workouts in parallel (exercises + sets + reps + weights)
+  const weekResults = await Promise.all(
+    Array.from({ length: totalWeeks }, (_, i) => i + 1).map((weekNumber) =>
+      callAiWithRetry<AiWeekWorkouts>(
+        resolved,
+        buildWeekSystemPrompt(),
+        buildWeekUserPrompt(profile, structure, weekNumber, totalWeeks, customization),
+        validateWeekWorkouts,
+        4000
+      )
+    )
+  );
 
-  // ONE small AI call: program name, description, goal summary, optional swaps/notes
-  const profileSummary = [
-    `Goal: ${profile.primaryGoal}`,
-    `Level: ${profile.experienceLevel}`,
-    `Days: ${profile.daysPerWeek}/week`,
-    `Duration: ${profile.sessionDurationMins} min`,
-    `Preferred Split: ${formatPreferredSplit(profile.preferredSplit)}`,
-    `Equipment: ${profile.availableEquipment.join(', ') || 'full gym'}`,
-    `Restrictions: ${profile.restrictions.join(', ') || 'none'}`,
-  ].join(', ');
-
-  const totalWeeks = Math.min(Math.max(requestedWeeks ?? 4, 1), 16);
-  const customNote = customization ? `\nCustomization request: "${customization}"` : '';
-
-  const userPrompt = `Athlete profile: ${profileSummary}${customNote}
-Requested program length: ${totalWeeks} week${totalWeeks === 1 ? '' : 's'}
-Templates being used: ${templateNames.join(', ')}
-Return JSON (no text outside JSON):
-{
-  "programName": "3-6 word name",
-  "programDescription": "2-3 sentence program description",
-  "goalSummary": "2-3 sentence coaching summary for this athlete",
-  "exerciseSwaps": [{"templateName":"string","oldExercise":"string","newExercise":"string"}],
-  "workoutNotes": [{"templateName":"string","coachNote":"string"}]
-}
-Only include exerciseSwaps if equipment or restrictions require it. Provide one workoutNotes entry per template.`;
-
-  let aiCustom: AiCustomization;
-  try {
-    aiCustom = await callAiWithRetry<AiCustomization>(
-      resolved,
-      'You are a fitness program designer. Return ONLY valid JSON matching the schema. No markdown.',
-      userPrompt,
-      validateAiCustomization,
-      900
-    );
-  } catch {
-    aiCustom = {
-      programName: `${profile.daysPerWeek}-Day ${profile.primaryGoal} Program`,
-      programDescription: `A ${profile.daysPerWeek}-day per week program tailored to your ${profile.primaryGoal} goals with proven evidence-based templates.`,
-      goalSummary: `This program is designed for a ${profile.experienceLevel} athlete focused on ${profile.primaryGoal}. Training ${profile.daysPerWeek} days per week with sessions around ${profile.sessionDurationMins} minutes.`,
-    };
-  }
-
-  // Build swap + note lookup maps
-  const swapMap = new Map<string, Map<string, string>>();
-  for (const swap of aiCustom.exerciseSwaps ?? []) {
-    if (!swapMap.has(swap.templateName)) swapMap.set(swap.templateName, new Map());
-    swapMap.get(swap.templateName)!.set(swap.oldExercise, swap.newExercise);
-  }
-  const noteMap = new Map<string, string>();
-  for (const note of aiCustom.workoutNotes ?? []) {
-    noteMap.set(note.templateName, note.coachNote);
-  }
-
-  // Build schedule for the requested program length
-  const trainingDays = TRAINING_DAYS[Math.min(profile.daysPerWeek, 7)] ?? TRAINING_DAYS[3];
-  const workouts: AiPlannedWorkout[] = [];
-
-  for (let week = 1; week <= totalWeeks; week++) {
-    trainingDays.forEach((day, dayIdx) => {
-      const template = templates[dayIdx % templates.length];
-      const swaps = swapMap.get(template.name);
-      const modifiedTemplate = swaps
-        ? { ...template, exercises: template.exercises.map((ex) => ({ ...ex, name: swaps.get(ex.name) ?? ex.name })) }
-        : template;
-      workouts.push(
-        templateToWorkout(
-          modifiedTemplate,
-          week,
-          totalWeeks,
-          day,
-          noteMap.get(template.name) ?? ''
-        )
-      );
-    });
-  }
-
-  const progressionRules =
-    totalWeeks >= 4
-      ? {
-          mainLifts: `Add 1 rep per set through week ${Math.max(totalWeeks - 1, 1)}; week ${totalWeeks} is a deload with reduced volume.`,
-          accessories: 'Maintain weight, focus on form and full range of motion.',
-          conditioning: 'Keep effort moderate and prioritize recovery on the final week.',
-        }
-      : {
-          mainLifts: `Add 1 rep per set each week through week ${totalWeeks}.`,
-          accessories: 'Maintain weight, focus on form and full range of motion.',
-          conditioning: 'Keep conditioning easy enough that strength work stays the priority.',
-        };
+  const workouts = weekResults.flatMap((w) => w.workouts);
 
   return {
-    programName: aiCustom.programName,
-    programDescription: aiCustom.programDescription,
+    programName: structure.programName,
+    programDescription: structure.programDescription,
     totalWeeks,
-    weeklyStructure: { split: splitName, days: trainingDays },
-    progressionRules,
-    aiGoalSummary: aiCustom.goalSummary,
+    weeklyStructure: structure.weeklyStructure,
+    progressionRules: structure.progressionRules,
+    aiGoalSummary: structure.aiGoalSummary,
     workouts,
   };
 }
@@ -1011,6 +829,16 @@ export interface CoachChatInput {
   userId: string;
   message: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  liveMetrics?: {
+    status: 'unsupported' | 'waiting' | 'live' | 'stale' | 'error';
+    heartRate?: number | null;
+    activeEnergyBurned?: number | null;
+    heartRateTrend?: 'rising' | 'steady' | 'falling' | 'unknown';
+    lastHeartRateSampleAt?: string | null;
+    lastEnergySampleAt?: string | null;
+    lastUpdatedAt?: string | null;
+    errorMessage?: string | null;
+  };
 }
 
 interface CoachChatPlannedExercise {
@@ -1043,6 +871,60 @@ function parsePlannedExercises(raw: string | null | undefined): CoachChatPlanned
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function buildLiveMetricsSummary(
+  liveMetrics: CoachChatInput['liveMetrics'],
+): { summary: string; coachingCue: string } {
+  if (!liveMetrics) {
+    return {
+      summary: 'No live Apple Health or Apple Watch metrics were provided.',
+      coachingCue: 'Do not reference live recovery data unless the user brings it up.',
+    };
+  }
+
+  const hrText = liveMetrics.heartRate != null ? `${Math.round(liveMetrics.heartRate)} bpm` : 'unknown HR';
+  const kcalText = liveMetrics.activeEnergyBurned != null
+    ? `${Math.round(liveMetrics.activeEnergyBurned)} kcal active energy`
+    : 'unknown active energy';
+  const freshness = liveMetrics.lastUpdatedAt ?? liveMetrics.lastHeartRateSampleAt ?? liveMetrics.lastEnergySampleAt;
+
+  switch (liveMetrics.status) {
+    case 'live': {
+      const trend = liveMetrics.heartRateTrend ?? 'unknown';
+      const cue =
+        liveMetrics.heartRate != null && liveMetrics.heartRate >= 150 && trend === 'rising'
+          ? 'Recovery looks taxed right now. Bias toward more rest or holding load unless the set data clearly says otherwise.'
+          : liveMetrics.heartRate != null && liveMetrics.heartRate <= 115 && trend === 'falling'
+          ? 'Recovery looks solid right now. If the set and RPE data also look good, it is reasonable to encourage continuing or a small load increase.'
+          : 'Recovery looks mixed. Use the live metrics as one more signal alongside RPE, rep quality, and rep drop-off.';
+      return {
+        summary: `Live Apple Health metrics are available: HR ${hrText}, ${kcalText}, trend ${trend}, last update ${freshness ?? 'unknown'}.`,
+        coachingCue: cue,
+      };
+    }
+    case 'stale':
+      return {
+        summary: `Apple Health metrics are stale: latest HR ${hrText}, ${kcalText}, last update ${freshness ?? 'unknown'}.`,
+        coachingCue: 'You may mention that the recovery signal is delayed and should be treated cautiously.',
+      };
+    case 'waiting':
+      return {
+        summary: 'Apple Health is connected but no fresh live samples have arrived yet.',
+        coachingCue: 'Do not invent live recovery insights. Use the workout log only until data arrives.',
+      };
+    case 'error':
+      return {
+        summary: `Apple Health live metrics failed to load${liveMetrics.errorMessage ? `: ${liveMetrics.errorMessage}` : '.'}`,
+        coachingCue: 'Acknowledge that live data is unavailable if relevant, then coach from the workout log.',
+      };
+    case 'unsupported':
+    default:
+      return {
+        summary: 'Apple Health live metrics are unavailable on this device or build.',
+        coachingCue: 'Do not imply any live watch data is available.',
+      };
   }
 }
 
@@ -1211,11 +1093,14 @@ export async function generateCoachChat(input: CoachChatInput): Promise<string> 
     ? `No explicit target misses logged. Rep drop-off signals: ${repDropSignals.join(' | ')}`
     : 'No missed reps or rep drop-offs detected yet.';
   const userGoal = profile?.primaryGoal ?? 'general_fitness';
+  const liveMetricsSummary = buildLiveMetricsSummary(input.liveMetrics);
 
   const systemPrompt = `You are an expert strength coach inside a workout tracking app. Answer questions about the user's CURRENT workout only. Be specific, direct, and brief (under 60 words).
 
 Rules:
 - Use the workout data below to give specific answers
+- Use live Apple Health or Apple Watch metrics only when they are actually present below
+- Treat live heart-rate data as a recovery signal, not a medical diagnostic
 - If asked for a substitution, suggest ONE exercise that uses similar muscles
 - Do not give medical advice
 - Do not be generic — reference their actual numbers
@@ -1234,6 +1119,10 @@ Fatigue indicators:
 ${fatigueIndicators}
 Missed reps / drop-off signals:
 ${missedRepSummary}
+Live metrics:
+${liveMetricsSummary.summary}
+Live coaching cue:
+${liveMetricsSummary.coachingCue}
 Previous workouts:
 ${previousWorkoutSummary}`;
 

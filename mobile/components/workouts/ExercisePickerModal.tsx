@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@/lib/theme';
 import { exerciseLibrary, type LibraryExercise } from '@/lib/exerciseLibrary';
@@ -48,6 +49,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePickerModalProps) {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState<Category>('all');
   const searchRef = useRef<TextInput>(null);
@@ -122,7 +124,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect }: ExercisePick
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { reset(); onClose(); }}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => { reset(); onClose(); }} />
 
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <View style={styles.handle} />
 
         {/* Header */}
@@ -260,12 +262,22 @@ const styles = StyleSheet.create({
   customHint: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 1 },
   categoryRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   pill: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
     borderRadius: radii.full, backgroundColor: colors.bg,
     borderWidth: 1, borderColor: colors.border,
+    justifyContent: 'center',
   },
   pillActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  pillText: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '500' },
+  pillText: {
+    fontSize: typography.sm,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
   pillTextActive: { color: '#fff' },
   exerciseRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -3,8 +3,8 @@ import type { User } from '@/types';
 
 export type WelcomeVariant = 'intro' | 'updates' | 'reviewer';
 
-export const WELCOME_RELEASE_ID = '2026-04-25.mobile.welcome-v1';
-export const WELCOME_RELEASED_AT = '2026-04-25T00:00:00.000Z';
+export const WELCOME_RELEASE_ID = '2026-04-30.mobile.welcome-v2';
+export const WELCOME_RELEASED_AT = '2026-04-30T00:00:00.000Z';
 export const REVIEWER_EMAILS = ['reviewer@avgjoe.com'] as const;
 export const REVIEWER_EMAIL = REVIEWER_EMAILS[0];
 

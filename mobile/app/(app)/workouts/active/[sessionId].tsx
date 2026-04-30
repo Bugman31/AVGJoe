@@ -35,7 +35,11 @@ import { RestTimerModal } from '@/components/workouts/RestTimerModal';
 import { WorkoutSummaryBar } from '@/components/workouts/WorkoutSummaryBar';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
-import { saveWorkout } from '@/lib/healthkit';
+import {
+  saveWorkout,
+  startLiveWorkoutMetrics,
+  type LiveWorkoutMetricsSnapshot,
+} from '@/lib/healthkit';
 import { useRestTimer, REST_TIMER_OPTIONS, type RestTimerDuration } from '@/hooks/useRestTimer';
 import { useSetCompleteSound } from '@/hooks/useSetCompleteSound';
 import type { WorkoutSession, PlannedWorkout, PlannedExercise, PlannedExerciseSet, WorkoutSummary, UserProfile, SetRecommendation } from '@/types';
@@ -97,9 +101,54 @@ interface AICoachState {
   isLoading: boolean;
 }
 
+const DEFAULT_LIVE_METRICS: LiveWorkoutMetricsSnapshot = {
+  status: 'unsupported',
+  heartRate: null,
+  activeEnergyBurned: null,
+  heartRateTrend: 'unknown',
+  lastHeartRateSampleAt: null,
+  lastEnergySampleAt: null,
+  lastUpdatedAt: null,
+  errorMessage: null,
+};
+
+function formatLiveMetricStatus(metrics: LiveWorkoutMetricsSnapshot): string {
+  switch (metrics.status) {
+    case 'live':
+      return 'Live Apple Health';
+    case 'stale':
+      return 'Apple Health delayed';
+    case 'waiting':
+      return 'Waiting for Apple Health';
+    case 'error':
+      return metrics.errorMessage ?? 'Apple Health unavailable';
+    case 'unsupported':
+    default:
+      return 'Apple Health unavailable';
+  }
+}
+
+function formatHeartRateTrend(
+  trend: LiveWorkoutMetricsSnapshot['heartRateTrend'],
+): string | null {
+  switch (trend) {
+    case 'rising':
+      return 'HR rising';
+    case 'falling':
+      return 'HR recovering';
+    case 'steady':
+      return 'HR steady';
+    default:
+      return null;
+  }
+}
+
 export default function ActiveWorkoutScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const router = useRouter();
+  const goHome = () => {
+    router.replace('/(app)/home');
+  };
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [plannedWorkout, setPlannedWorkout] = useState<PlannedWorkout | null>(null);
@@ -162,6 +211,7 @@ export default function ActiveWorkoutScreen() {
   const [restAiTip, setRestAiTip] = useState('');
   const [restExerciseName, setRestExerciseName] = useState('');
   const [restSetInfo, setRestSetInfo] = useState('');
+  const [liveMetrics, setLiveMetrics] = useState<LiveWorkoutMetricsSnapshot>(DEFAULT_LIVE_METRICS);
 
   // Sound
   const { play: playSound } = useSetCompleteSound();
@@ -195,13 +245,22 @@ export default function ActiveWorkoutScreen() {
         setShowPreEnergyModal(true);
       } catch {
         Toast.show({ type: 'error', text1: 'Failed to load workout' });
-        if (router.canGoBack()) router.back(); else router.replace('/(app)/workouts');
+        goHome();
       } finally {
         setIsLoading(false);
       }
     }
     init();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!session?.startedAt) return;
+
+    return startLiveWorkoutMetrics(
+      { startDate: new Date(session.startedAt) },
+      setLiveMetrics,
+    );
+  }, [session?.startedAt]);
 
   async function loadLastSessionData(exercises: PlannedExercise[], currentSessionId: string) {
     const uniqueNames = [...new Set(exercises.map((e) => e.name))];
@@ -283,16 +342,16 @@ export default function ActiveWorkoutScreen() {
     targetRepMin?: number;
     targetRepMax?: number;
     progressionType?: 'strength' | 'hypertrophy' | 'conditioning';
-  }): Promise<{ recommendation: SetRecommendation } | null> {
-    if (!sessionId) return null;
+  }): Promise<{ recommendation: SetRecommendation }> {
+    if (!sessionId) throw new Error('Session not found');
     try {
       const res = await api.post<{ set: unknown; recommendation: SetRecommendation }>(
         `/api/sessions/${sessionId}/sets`,
         payload
       );
       return { recommendation: res.recommendation };
-    } catch {
-      return null;
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to log set');
     }
   }
 
@@ -338,23 +397,25 @@ export default function ActiveWorkoutScreen() {
     setRestExerciseName(exerciseName);
     setRestSetInfo(`Set ${setNumber} of ${totalSets}`);
 
-    const result = await submitSet({
-      exerciseId: exerciseKey,
-      exerciseName,
-      setNumber,
-      actualReps,
-      actualWeight,
-      unit,
-      rpe: state.rpe ?? undefined,
-      targetRepMin,
-      targetRepMax,
-      progressionType: 'strength',
-    });
-
-    if (!result) {
+    let result: { recommendation: SetRecommendation };
+    try {
+      result = await submitSet({
+        exerciseId: exerciseKey,
+        exerciseName,
+        setNumber,
+        actualReps,
+        actualWeight,
+        unit,
+        rpe: state.rpe ?? undefined,
+        targetRepMin,
+        targetRepMax,
+        progressionType: 'strength',
+      });
+    } catch (err) {
       setSetStates((prev) => ({ ...prev, [key]: { ...prev[key], logged: false } }));
       restTimer.stop();
-      Toast.show({ type: 'error', text1: 'Failed to log set. Please try again.' });
+      const message = err instanceof Error ? err.message : 'Failed to log set. Please try again.';
+      Toast.show({ type: 'error', text1: 'Failed to log set', text2: message });
       return;
     }
 
@@ -522,8 +583,9 @@ export default function ActiveWorkoutScreen() {
       router.replace(
         `/(app)/workouts/celebration?sessionId=${sessionId}&sessionName=${encodeURIComponent(res.session.name)}&setsLogged=${loggedCount}&duration=${durationSecs}`
       );
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to complete workout' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to complete workout';
+      Toast.show({ type: 'error', text1: 'Failed to complete workout', text2: message });
       setIsCompleting(false);
     }
   }
@@ -557,7 +619,7 @@ export default function ActiveWorkoutScreen() {
         <TouchableOpacity onPress={() => {
           Alert.alert('Exit Workout', 'Your progress is saved. Exit anyway?', [
             { text: 'Continue', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => { if (router.canGoBack()) router.back(); else router.replace('/(app)/workouts'); } },
+            { text: 'Exit', style: 'destructive', onPress: goHome },
           ]);
         }}>
           <Ionicons name="close" size={24} color={theme.colors.text} />
@@ -580,6 +642,36 @@ export default function ActiveWorkoutScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {liveMetrics.status !== 'unsupported' && (
+        <View style={styles.liveMetricsStrip}>
+          <View style={styles.liveMetricsHeader}>
+            <Ionicons
+              name={liveMetrics.status === 'live' ? 'heart' : 'heart-outline'}
+              size={14}
+              color={liveMetrics.status === 'live' ? theme.colors.danger : theme.colors.textSecondary}
+            />
+            <Text style={styles.liveMetricsTitle}>{formatLiveMetricStatus(liveMetrics)}</Text>
+          </View>
+          <View style={styles.liveMetricsValues}>
+            <Text style={styles.liveMetricsValue}>
+              {liveMetrics.heartRate != null ? `${liveMetrics.heartRate} bpm` : '-- bpm'}
+            </Text>
+            <Text style={styles.liveMetricsDivider}>·</Text>
+            <Text style={styles.liveMetricsValue}>
+              {liveMetrics.activeEnergyBurned != null ? `${liveMetrics.activeEnergyBurned} kcal` : '-- kcal'}
+            </Text>
+            {formatHeartRateTrend(liveMetrics.heartRateTrend) && (
+              <>
+                <Text style={styles.liveMetricsDivider}>·</Text>
+                <Text style={styles.liveMetricsTrend}>
+                  {formatHeartRateTrend(liveMetrics.heartRateTrend)}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Warmup strip */}
       {plannedWorkout?.warmup && plannedWorkout.warmup.length > 0 && (
@@ -1125,6 +1217,43 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   title: { fontSize: 17, fontWeight: '700', color: theme.colors.text, flex: 1, textAlign: 'center', marginHorizontal: 8 },
+  liveMetricsStrip: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    gap: 4,
+  },
+  liveMetricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveMetricsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  liveMetricsValues: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  liveMetricsValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  liveMetricsDivider: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+  },
+  liveMetricsTrend: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+  },
   warmupStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   warmupText: { fontSize: 12, color: theme.colors.textSecondary, flex: 1 },
   // Rest timer banner
