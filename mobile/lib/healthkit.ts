@@ -71,6 +71,22 @@ interface HealthValueSample {
   endDate?: string;
 }
 
+interface RawWorkoutSample {
+  id?: string;
+  activityId?: number;
+  activityName?: string;
+  startDate?: string;
+  endDate?: string;
+  start?: string;
+  end?: string;
+  duration?: number;
+  totalEnergyBurned?: number;
+  calories?: number;
+  sourceName?: string;
+  sourceId?: string;
+  device?: string;
+}
+
 const READ_PERMISSIONS = [
   'Workout',
   'HeartRate',
@@ -155,7 +171,8 @@ export async function saveWorkout(opts: SaveWorkoutOptions): Promise<boolean> {
 
 /**
  * Fetches workouts recorded in Apple Health over the past `days` days.
- * Filters to workouts from Apple Watch by checking the sourceName.
+ * Uses the documented `getSamples({ type: 'Workout' })` API from
+ * `react-native-health` and normalizes the result shape.
  */
 export async function getAppleWatchWorkouts(days = 30): Promise<HKWorkoutSample[]> {
   if (!isHealthKitAvailable()) return [];
@@ -169,24 +186,62 @@ export async function getAppleWatchWorkouts(days = 30): Promise<HKWorkoutSample[
       endDate: new Date().toISOString(),
       limit: 100,
       ascending: false,
+      type: 'Workout',
     };
 
-    AppleHealthKit.getWorkouts(options, (err: Error, results: any[]) => {
-      if (err || !results) { resolve([]); return; }
+    const normalizeWorkoutSample = (workout: RawWorkoutSample): HKWorkoutSample | null => {
+      const normalizedStartDate = workout.startDate ?? workout.start ?? null;
+      const normalizedEndDate = workout.endDate ?? workout.end ?? null;
+      if (!normalizedStartDate || !normalizedEndDate) return null;
 
-      const samples: HKWorkoutSample[] = results.map((w) => ({
-        id: w.id ?? `${w.startDate}-${w.activityName}`,
-        activityName: w.activityName ?? 'Workout',
-        startDate: w.startDate,
-        endDate: w.endDate,
-        duration: w.duration ?? 0,
-        totalEnergyBurned: w.totalEnergyBurned,
-        sourceName: w.sourceName ?? '',
-        isFromWatch: (w.sourceName ?? '').toLowerCase().includes('watch'),
-      }));
+      const derivedDuration = Math.max(
+        0,
+        Math.round((Date.parse(normalizedEndDate) - Date.parse(normalizedStartDate)) / 1000),
+      );
+      const sourceName = workout.sourceName ?? '';
+      const device = workout.device ?? '';
+      const sourceId = workout.sourceId ?? '';
+      const watchHint = `${sourceName} ${device} ${sourceId}`.toLowerCase();
+
+      return {
+        id: workout.id ?? `${normalizedStartDate}-${workout.activityId ?? workout.activityName ?? 'Workout'}`,
+        activityName: workout.activityName ?? 'Workout',
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+        duration: workout.duration ?? derivedDuration,
+        totalEnergyBurned: workout.totalEnergyBurned ?? workout.calories,
+        sourceName,
+        isFromWatch:
+          watchHint.includes('watch') ||
+          (device.length > 0 && !device.toLowerCase().includes('iphone')),
+      };
+    };
+
+    const handleResults = (err: Error | string | null, results: RawWorkoutSample[] | undefined) => {
+      if (err || !Array.isArray(results)) {
+        resolve([]);
+        return;
+      }
+
+      const samples = results
+        .map(normalizeWorkoutSample)
+        .filter((sample): sample is HKWorkoutSample => sample !== null)
+        .sort((a, b) => Date.parse(b.startDate) - Date.parse(a.startDate));
 
       resolve(samples);
-    });
+    };
+
+    if (typeof AppleHealthKit.getSamples === 'function') {
+      AppleHealthKit.getSamples(options, handleResults);
+      return;
+    }
+
+    if (typeof AppleHealthKit.getWorkouts === 'function') {
+      AppleHealthKit.getWorkouts(options, handleResults);
+      return;
+    }
+
+    resolve([]);
   });
 }
 
