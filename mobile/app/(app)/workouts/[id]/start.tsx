@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
+import { isHealthKitAvailable } from '@/lib/healthkit';
 import { useSession } from '@/hooks/useSession';
 import { WorkoutTemplate, LogSetInput } from '@/types';
 import { colors, spacing, typography } from '@/lib/theme';
@@ -38,6 +39,7 @@ export default function StartWorkoutScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
   const [notes, setNotes] = useState('');
+  const showWatchReminder = isHealthKitAvailable();
 
   useEffect(() => {
     async function init() {
@@ -119,6 +121,15 @@ export default function StartWorkoutScreen() {
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {showWatchReminder ? (
+            <View style={styles.watchReminder}>
+              <Ionicons name="watch-outline" size={16} color={colors.accent} />
+              <Text style={styles.watchReminderText}>
+                Using your Apple Watch too? Start the workout on your watch now so heart rate data and the session stay in sync.
+              </Text>
+            </View>
+          ) : null}
+
           {template.exercises.map((exercise) => (
             <Card key={exercise.id} style={styles.exerciseCard}>
               <Text style={styles.exerciseName}>{exercise.name}</Text>
@@ -241,6 +252,22 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+  watchReminder: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  watchReminderText: {
+    flex: 1,
+    fontSize: typography.sm,
+    lineHeight: 18,
+    color: colors.textSecondary,
+  },
   exerciseCard: { gap: spacing.sm },
   exerciseName: { fontSize: typography.lg, fontWeight: '600', color: colors.text },
   exerciseNotes: { fontSize: typography.sm, color: colors.textMuted, fontStyle: 'italic' },

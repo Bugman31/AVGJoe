@@ -65,6 +65,8 @@ export interface StartLiveWorkoutMetricsOptions {
   pollIntervalMs?: number;
 }
 
+type HealthStatusCode = 0 | 1 | 2;
+
 interface HealthValueSample {
   value: number;
   startDate?: string;
@@ -87,18 +89,6 @@ interface RawWorkoutSample {
   device?: string;
 }
 
-const READ_PERMISSIONS = [
-  'Workout',
-  'HeartRate',
-  'ActiveEnergyBurned',
-  'StepCount',
-];
-
-const WRITE_PERMISSIONS = [
-  'Workout',
-  'ActiveEnergyBurned',
-];
-
 const DEFAULT_LIVE_METRICS: LiveWorkoutMetricsSnapshot = {
   status: 'unsupported',
   heartRate: null,
@@ -118,6 +108,36 @@ export function isHealthKitAvailable(): boolean {
   return Platform.OS === 'ios' && AppleHealthKit !== null;
 }
 
+export interface HealthKitAccessStatus {
+  isAvailable: boolean;
+  canQueryAuthorizationStatus: boolean;
+  workoutWriteStatus: HealthStatusCode | null;
+  activeEnergyWriteStatus: HealthStatusCode | null;
+  needsPermissionPrompt: boolean;
+  shouldPromptSettings: boolean;
+  canWriteWorkouts: boolean;
+}
+
+function getPermissionConfiguration() {
+  const workoutPermission = HealthKitConstants?.Permissions?.Workout ?? 'Workout';
+  const heartRatePermission = HealthKitConstants?.Permissions?.HeartRate ?? 'HeartRate';
+  const activeEnergyPermission =
+    HealthKitConstants?.Permissions?.ActiveEnergyBurned ?? 'ActiveEnergyBurned';
+  const stepCountPermission = HealthKitConstants?.Permissions?.StepCount ?? 'StepCount';
+
+  return {
+    permissions: {
+      read: [
+        workoutPermission,
+        heartRatePermission,
+        activeEnergyPermission,
+        stepCountPermission,
+      ],
+      write: [workoutPermission, activeEnergyPermission],
+    },
+  };
+}
+
 export function isLiveMetricsSupported(): boolean {
   return isHealthKitAvailable() && AppleHealthKitNativeModule != null;
 }
@@ -131,15 +151,61 @@ export async function requestPermissions(): Promise<boolean> {
   if (!isHealthKitAvailable()) return false;
 
   return new Promise((resolve) => {
-    const permissions = {
-      permissions: {
-        read: READ_PERMISSIONS,
-        write: WRITE_PERMISSIONS,
-      },
-    };
+    const permissions = getPermissionConfiguration();
     AppleHealthKit.initHealthKit(permissions, (err: Error) => {
       resolve(!err);
     });
+  });
+}
+
+export async function getHealthKitAccessStatus(): Promise<HealthKitAccessStatus> {
+  if (!isHealthKitAvailable()) {
+    return {
+      isAvailable: false,
+      canQueryAuthorizationStatus: false,
+      workoutWriteStatus: null,
+      activeEnergyWriteStatus: null,
+      needsPermissionPrompt: false,
+      shouldPromptSettings: false,
+      canWriteWorkouts: false,
+    };
+  }
+
+  if (typeof AppleHealthKit.getAuthStatus !== 'function') {
+    return {
+      isAvailable: true,
+      canQueryAuthorizationStatus: false,
+      workoutWriteStatus: null,
+      activeEnergyWriteStatus: null,
+      needsPermissionPrompt: false,
+      shouldPromptSettings: false,
+      canWriteWorkouts: false,
+    };
+  }
+
+  return new Promise((resolve) => {
+    AppleHealthKit.getAuthStatus(
+      getPermissionConfiguration(),
+      (_err: string | null, results: { permissions?: { write?: HealthStatusCode[] } } | undefined) => {
+        const writeStatuses = results?.permissions?.write ?? [];
+        const workoutWriteStatus = writeStatuses[0] ?? null;
+        const activeEnergyWriteStatus = writeStatuses[1] ?? null;
+        const hasDeniedPermission =
+          workoutWriteStatus === 1 || activeEnergyWriteStatus === 1;
+        const needsPermissionPrompt =
+          workoutWriteStatus === 0 || activeEnergyWriteStatus === 0;
+
+        resolve({
+          isAvailable: true,
+          canQueryAuthorizationStatus: true,
+          workoutWriteStatus,
+          activeEnergyWriteStatus,
+          needsPermissionPrompt,
+          shouldPromptSettings: hasDeniedPermission,
+          canWriteWorkouts: workoutWriteStatus === 2,
+        });
+      },
+    );
   });
 }
 

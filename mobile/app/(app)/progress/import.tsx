@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,15 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/lib/theme';
 import { api } from '@/lib/api';
 import {
+  getHealthKitAccessStatus,
   isHealthKitAvailable,
   requestPermissions,
   getAppleWatchWorkouts,
@@ -28,27 +30,57 @@ export default function ImportScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [importing, setImporting] = useState<string | null>(null);
   const [imported, setImported] = useState<Set<string>>(new Set());
+  const [shouldReviewPermissions, setShouldReviewPermissions] = useState(false);
 
-  useEffect(() => {
-    init();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void init();
+    }, [])
+  );
 
   async function init() {
+    setIsLoading(true);
+    setShouldReviewPermissions(false);
     if (!isHealthKitAvailable()) {
       setIsLoading(false);
       return;
     }
-    const granted = await requestPermissions();
+    const accessStatus = await getHealthKitAccessStatus();
+    if (accessStatus.shouldPromptSettings) {
+      setIsLoading(false);
+      setShouldReviewPermissions(true);
+      Alert.alert(
+        'Review Apple Health Access',
+        "Average Joe's needs Apple Health access to import your workouts. Open Settings and make sure workout access is enabled.",
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ],
+      );
+      return;
+    }
+
+    const granted =
+      accessStatus.needsPermissionPrompt || !accessStatus.canQueryAuthorizationStatus
+        ? await requestPermissions()
+        : true;
+
     if (!granted) {
       setIsLoading(false);
+      setShouldReviewPermissions(true);
       Alert.alert(
         'Permission Required',
-        'Please grant Health access in Settings > Privacy > Health > Average Joe\'s.',
+        'Please grant Health access in Settings > Privacy & Security > Health > Average Joe\'s.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ],
       );
       return;
     }
     const results = await getAppleWatchWorkouts(60);
     setWorkouts(results);
+    setShouldReviewPermissions(results.length === 0);
     setIsLoading(false);
   }
 
@@ -110,7 +142,17 @@ export default function ImportScreen() {
             <View style={styles.empty}>
               <Ionicons name="watch-outline" size={48} color={theme.colors.textMuted} />
               <Text style={styles.emptyTitle}>No workouts found</Text>
-              <Text style={styles.emptyText}>No workouts in the last 60 days from Apple Health.</Text>
+              <Text style={styles.emptyText}>
+                No workouts in the last 60 days from Apple Health.
+                {shouldReviewPermissions
+                  ? '\n\nIf you expected Apple Watch workouts here, review Apple Health access for Average Joe\'s.'
+                  : ''}
+              </Text>
+              {shouldReviewPermissions ? (
+                <TouchableOpacity style={styles.settingsBtn} onPress={() => { void Linking.openSettings(); }}>
+                  <Text style={styles.settingsBtnText}>Review Apple Health Access</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           }
           ListHeaderComponent={
@@ -195,6 +237,19 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12, paddingHorizontal: 32 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   emptyText: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  settingsBtn: {
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  settingsBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
   code: { fontFamily: 'Courier', backgroundColor: theme.colors.surface },
   card: {
     flexDirection: 'row',

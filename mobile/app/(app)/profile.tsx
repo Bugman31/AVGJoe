@@ -26,7 +26,11 @@ import { useTheme, type ThemeMode } from '@/context/ThemeContext';
 import { colors, spacing, typography, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { isHealthKitAvailable, requestPermissions } from '@/lib/healthkit';
+import {
+  getHealthKitAccessStatus,
+  isHealthKitAvailable,
+  requestPermissions,
+} from '@/lib/healthkit';
 
 type AiProvider = 'anthropic' | 'openai';
 
@@ -73,13 +77,34 @@ export default function ProfileScreen() {
       );
       return;
     }
-    const granted = await requestPermissions();
+    const accessStatus = await getHealthKitAccessStatus();
+    if (accessStatus.shouldPromptSettings) {
+      Alert.alert(
+        'Review Apple Health Access',
+        "Apple Health access looks limited for Average Joe's. Open iPhone Settings and make sure workout access is enabled.",
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ]
+      );
+      return;
+    }
+
+    const granted =
+      accessStatus.needsPermissionPrompt || !accessStatus.canQueryAuthorizationStatus
+        ? await requestPermissions()
+        : true;
+
     if (granted) {
       Toast.show({ type: 'success', text1: 'Apple Health connected' });
     } else {
       Alert.alert(
         'Permission Denied',
-        "Open Settings → Privacy & Security → Health → Average Joe's and enable read/write access."
+        "Open Settings → Privacy & Security → Health → Average Joe's and enable workout, heart rate, and active energy access.",
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ]
       );
     }
   }

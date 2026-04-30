@@ -36,6 +36,7 @@ import { WorkoutSummaryBar } from '@/components/workouts/WorkoutSummaryBar';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import {
+  isHealthKitAvailable,
   saveWorkout,
   startLiveWorkoutMetrics,
   type LiveWorkoutMetricsSnapshot,
@@ -212,6 +213,7 @@ export default function ActiveWorkoutScreen() {
   const [restExerciseName, setRestExerciseName] = useState('');
   const [restSetInfo, setRestSetInfo] = useState('');
   const [liveMetrics, setLiveMetrics] = useState<LiveWorkoutMetricsSnapshot>(DEFAULT_LIVE_METRICS);
+  const showWatchReminder = isHealthKitAvailable();
 
   // Sound
   const { play: playSound } = useSetCompleteSound();
@@ -670,6 +672,15 @@ export default function ActiveWorkoutScreen() {
               </>
             )}
           </View>
+        </View>
+      )}
+
+      {showWatchReminder && (
+        <View style={styles.watchReminderStrip}>
+          <Ionicons name="watch-outline" size={14} color={theme.colors.primary} />
+          <Text style={styles.watchReminderText}>
+            Using your Apple Watch too? Start the workout on your watch so Average Joe&apos;s can use that data during this session.
+          </Text>
         </View>
       )}
 
@@ -1252,6 +1263,22 @@ const styles = StyleSheet.create({
   },
   liveMetricsTrend: {
     fontSize: 12,
+    color: theme.colors.textSecondary,
+  },
+  watchReminderStrip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  watchReminderText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
     color: theme.colors.textSecondary,
   },
   warmupStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },

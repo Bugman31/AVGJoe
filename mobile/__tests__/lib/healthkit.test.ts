@@ -60,4 +60,61 @@ describe('healthkit workout import', () => {
       }),
     ]);
   });
+
+  it('flags denied HealthKit authorization so the app can prompt for settings', async () => {
+    const getAuthStatus = jest.fn((_options, callback) =>
+      callback(null, {
+        permissions: {
+          read: [2, 2, 2, 2],
+          write: [1, 2],
+        },
+      }),
+    );
+
+    jest.doMock('react-native', () => ({
+      NativeModules: { AppleHealthKit: {} },
+      NativeEventEmitter: jest.fn().mockImplementation(() => ({
+        addListener: jest.fn(() => ({ remove: jest.fn() })),
+      })),
+      Platform: { OS: 'ios' },
+    }));
+
+    jest.doMock('react-native-health', () => ({
+      __esModule: true,
+      default: {
+        Constants: {
+          Permissions: {
+            Workout: 'Workout',
+            HeartRate: 'HeartRate',
+            ActiveEnergyBurned: 'ActiveEnergyBurned',
+            StepCount: 'StepCount',
+          },
+        },
+        getAuthStatus,
+      },
+      HealthKitConstants: {
+        Permissions: {
+          Workout: 'Workout',
+          HeartRate: 'HeartRate',
+          ActiveEnergyBurned: 'ActiveEnergyBurned',
+          StepCount: 'StepCount',
+        },
+      },
+    }));
+
+    const { getHealthKitAccessStatus } = require('@/lib/healthkit');
+    const status = await getHealthKitAccessStatus();
+
+    expect(getAuthStatus).toHaveBeenCalled();
+    expect(status).toEqual(
+      expect.objectContaining({
+        isAvailable: true,
+        canQueryAuthorizationStatus: true,
+        workoutWriteStatus: 1,
+        activeEnergyWriteStatus: 2,
+        shouldPromptSettings: true,
+        needsPermissionPrompt: false,
+      }),
+    );
+  });
 });
