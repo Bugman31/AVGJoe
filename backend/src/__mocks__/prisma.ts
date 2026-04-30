@@ -15,6 +15,8 @@ export const prisma = {
   },
   plannedWorkout: {
     findUnique: jest.fn(),
+    count: jest.fn(),
+    createMany: jest.fn(),
   },
   workoutTemplate: {
     findMany: jest.fn(),
@@ -30,8 +32,10 @@ export const prisma = {
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   sharedProgram: {
+    findFirst: jest.fn(),
     findUnique: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),

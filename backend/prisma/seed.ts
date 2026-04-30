@@ -14,6 +14,92 @@ function sets(count: number, reps: number, unit = 'lbs') {
   }));
 }
 
+function buildWeeklyPlan(
+  weeks: number,
+  dayMap: Record<string, { name: string; focus: string; exercises: Array<Record<string, unknown>> }>,
+  weeklyWeightIncrease = 0,
+) {
+  const plan: Record<string, Record<string, unknown>> = {};
+
+  for (let week = 1; week <= weeks; week++) {
+    const weekKey = `week${week}`;
+    plan[weekKey] = {};
+
+    for (const [day, session] of Object.entries(dayMap)) {
+      plan[weekKey][day] = {
+        name: session.name,
+        focus: session.focus,
+        exercises: session.exercises.map((exercise) => ({
+          ...exercise,
+          weight: typeof exercise.weight === 'number'
+            ? Math.round((exercise.weight + weeklyWeightIncrease * (week - 1)) * 2) / 2
+            : exercise.weight,
+        })),
+      };
+    }
+  }
+
+  return plan;
+}
+
+function parseRepString(reps: string | number | undefined): number | null {
+  if (reps == null) return null;
+  if (typeof reps === 'number') return reps;
+  const first = reps.split(/[-–]/)[0].trim().replace(/\D/g, '');
+  const n = parseInt(first, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+function expandWorkoutPlanToPlannedWorkouts(
+  workoutPlan: unknown,
+  programId: string,
+  userId: string,
+) {
+  const plan = typeof workoutPlan === 'string' ? JSON.parse(workoutPlan) : (workoutPlan ?? {});
+  const rows: Array<Record<string, unknown>> = [];
+
+  for (const [weekKey, days] of Object.entries(plan as Record<string, unknown>)) {
+    const weekNumber = parseInt(weekKey.replace(/\D/g, ''), 10);
+    if (Number.isNaN(weekNumber)) continue;
+
+    for (const [dayName, session] of Object.entries(days as Record<string, unknown>)) {
+      const s = session as Record<string, unknown>;
+      const rawExercises = Array.isArray(s.exercises) ? s.exercises : [];
+      const plannedExercises = rawExercises.map((ex, idx) => {
+        const exercise = ex as Record<string, unknown>;
+        return {
+          name: (exercise.name as string) ?? 'Exercise',
+          orderIndex: idx,
+          notes: (exercise.notes as string | undefined) ?? null,
+          sets: Array.from({ length: Number(exercise.sets) || 3 }, (_, i) => ({
+            setNumber: i + 1,
+            targetReps: parseRepString(exercise.reps as string | number | undefined),
+            targetWeight: typeof exercise.weight === 'number' ? exercise.weight : null,
+            unit: (exercise.unit as string) ?? 'kg',
+          })),
+        };
+      });
+
+      rows.push({
+        programId,
+        userId,
+        weekNumber,
+        dayOfWeek: dayName,
+        name: (s.name as string) ?? dayName,
+        focus: (s.focus as string | undefined) ?? null,
+        warmup: JSON.stringify([]),
+        exercises: JSON.stringify(plannedExercises),
+        conditioning: null,
+        coachNotes: null,
+        estimatedDuration: null,
+        isCompleted: false,
+      });
+    }
+  }
+
+  return rows;
+}
+
 // ─── Preloaded template definitions ─────────────────────────────────────────
 //
 // Design principles:
@@ -420,6 +506,12 @@ const PRELOADED_TEMPLATES = [
 async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@avgjoe.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin1234!';
+  const reviewerEmail =
+    process.env.REVIEWER_EMAIL ||
+    (process.env.NODE_ENV === 'production' ? '' : 'reviewer@avgjoe.com');
+  const reviewerPassword =
+    process.env.REVIEWER_PASSWORD ||
+    (process.env.NODE_ENV === 'production' ? '' : 'Reviewer1234!');
 
   let admin = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!admin) {
@@ -430,6 +522,23 @@ async function main() {
     console.log(`✅ Admin user created: ${admin.email}`);
   } else {
     console.log(`Admin user already exists: ${adminEmail}`);
+  }
+
+  if (reviewerEmail && reviewerPassword) {
+    let reviewer = await prisma.user.findUnique({ where: { email: reviewerEmail } });
+    if (!reviewer) {
+      const passwordHash = await bcrypt.hash(reviewerPassword, 12);
+      reviewer = await prisma.user.create({
+        data: {
+          email: reviewerEmail,
+          passwordHash,
+          name: 'App Review',
+        },
+      });
+      console.log(`✅ Reviewer user created: ${reviewer.email}`);
+    } else {
+      console.log(`Reviewer user already exists: ${reviewerEmail}`);
+    }
   }
 
   // Seed preloaded workout templates (idempotent — skip if name already seeded)
@@ -524,6 +633,40 @@ async function main() {
       coverImageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
       ratingAverage: 4.8,
       enrollmentCount: 312,
+      equipment: ['barbell', 'bench', 'squat rack', 'pull-up bar'],
+      tags: ['strength', 'beginner', 'barbell', 'linear progression'],
+      workoutPlan: buildWeeklyPlan(12, {
+        Monday: {
+          name: 'Full Body A',
+          focus: 'Squat / Bench / Row',
+          exercises: [
+            { name: 'Barbell Back Squat', sets: 5, reps: '5', weight: 95, unit: 'lbs', notes: 'Leave 1-2 reps in reserve on the first week.' },
+            { name: 'Barbell Bench Press', sets: 5, reps: '5', weight: 75, unit: 'lbs', notes: 'Use a full pause on the chest for your first rep.' },
+            { name: 'Barbell Row', sets: 4, reps: '8', weight: 65, unit: 'lbs', notes: 'Keep your torso fixed and drive elbows back.' },
+            { name: 'Walking Lunge', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+          ],
+        },
+        Wednesday: {
+          name: 'Full Body B',
+          focus: 'Deadlift / Press / Pull',
+          exercises: [
+            { name: 'Deadlift', sets: 4, reps: '5', weight: 115, unit: 'lbs', notes: 'Reset each rep and brace hard.' },
+            { name: 'Overhead Press', sets: 4, reps: '6', weight: 55, unit: 'lbs', notes: 'Squeeze glutes and keep ribs down.' },
+            { name: 'Lat Pulldown', sets: 3, reps: '10', weight: 70, unit: 'lbs', notes: 'Pull elbows to your pockets.' },
+            { name: 'Goblet Squat', sets: 3, reps: '12', weight: 35, unit: 'lbs', notes: 'Use this to groove depth and control.' },
+          ],
+        },
+        Friday: {
+          name: 'Full Body C',
+          focus: 'Squat / Incline / Hinge',
+          exercises: [
+            { name: 'Front Squat', sets: 4, reps: '6', weight: 75, unit: 'lbs', notes: 'Stay tall through the torso.' },
+            { name: 'Incline Dumbbell Press', sets: 4, reps: '8', weight: 30, unit: 'lbs', notes: 'Smooth tempo on the way down.' },
+            { name: 'Romanian Deadlift', sets: 3, reps: '8', weight: 95, unit: 'lbs', notes: 'Keep the bar close to your legs.' },
+            { name: 'Seated Cable Row', sets: 3, reps: '12', weight: 65, unit: 'lbs', notes: 'Pause at the chest on every rep.' },
+          ],
+        },
+      }, 5),
     },
     {
       coachEmail: 'coach.sarah@avgjoe.com',
@@ -539,6 +682,50 @@ async function main() {
       coverImageUrl: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80',
       ratingAverage: 4.6,
       enrollmentCount: 187,
+      equipment: ['dumbbells', 'bench', 'cable machine', 'bodyweight'],
+      tags: ['hypertrophy', 'fat loss', 'upper lower', 'conditioning'],
+      workoutPlan: buildWeeklyPlan(8, {
+        Monday: {
+          name: 'Upper Sculpt',
+          focus: 'Chest / Back / Shoulders',
+          exercises: [
+            { name: 'Incline Dumbbell Press', sets: 4, reps: '10', weight: 25, unit: 'lbs', notes: 'Last set should feel like RPE 8.' },
+            { name: 'Chest-Supported Row', sets: 4, reps: '10', weight: 30, unit: 'lbs', notes: 'Drive elbows toward hips.' },
+            { name: 'Arnold Press', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: 'Stay smooth through the rotation.' },
+            { name: 'Cable Face Pull', sets: 3, reps: '15', weight: 25, unit: 'lbs', notes: 'Pause at eye level.' },
+          ],
+        },
+        Tuesday: {
+          name: 'Lower Engine',
+          focus: 'Legs / Glutes / Core',
+          exercises: [
+            { name: 'Goblet Squat', sets: 4, reps: '12', weight: 35, unit: 'lbs', notes: 'Control the bottom position.' },
+            { name: 'Romanian Deadlift', sets: 4, reps: '10', weight: 65, unit: 'lbs', notes: 'Stretch hamstrings without losing posture.' },
+            { name: 'Reverse Lunge', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+            { name: 'Plank', sets: 3, reps: '45', weight: undefined, unit: 'sec', notes: '45-second hold.' },
+          ],
+        },
+        Thursday: {
+          name: 'Upper Pump',
+          focus: 'Back / Arms / Shoulders',
+          exercises: [
+            { name: 'Lat Pulldown', sets: 4, reps: '12', weight: 65, unit: 'lbs', notes: 'Full stretch at the top.' },
+            { name: 'Dumbbell Bench Press', sets: 4, reps: '10', weight: 30, unit: 'lbs', notes: 'Use a slight pause at the bottom.' },
+            { name: 'Dumbbell Lateral Raise', sets: 3, reps: '15', weight: 12.5, unit: 'lbs', notes: 'Lead with the elbows.' },
+            { name: 'Hammer Curl', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: 'No torso swing.' },
+          ],
+        },
+        Friday: {
+          name: 'Lower + Finisher',
+          focus: 'Legs / Conditioning',
+          exercises: [
+            { name: 'Leg Press', sets: 4, reps: '12', weight: 140, unit: 'lbs', notes: 'Smooth lockout, no bouncing.' },
+            { name: 'Hip Thrust', sets: 4, reps: '10', weight: 95, unit: 'lbs', notes: 'Pause for one second at the top.' },
+            { name: 'Walking Lunge', sets: 3, reps: '12', weight: 15, unit: 'lbs', notes: '12 reps per leg.' },
+            { name: 'Bike Sprint', sets: 6, reps: '20', weight: undefined, unit: 'sec', notes: '20 seconds hard, 60 seconds easy.' },
+          ],
+        },
+      }, 2.5),
     },
     {
       coachEmail: 'coach.derek@avgjoe.com',
@@ -554,6 +741,70 @@ async function main() {
       coverImageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80',
       ratingAverage: 4.9,
       enrollmentCount: 94,
+      equipment: ['barbell', 'dumbbells', 'cable machine', 'leg press'],
+      tags: ['powerlifting', 'ppl', 'advanced', 'strength'],
+      workoutPlan: buildWeeklyPlan(8, {
+        Monday: {
+          name: 'Push Power',
+          focus: 'Bench / Press / Triceps',
+          exercises: [
+            { name: 'Barbell Bench Press', sets: 5, reps: '5', weight: 185, unit: 'lbs', notes: 'Explode up, control down.' },
+            { name: 'Overhead Press', sets: 4, reps: '6', weight: 105, unit: 'lbs', notes: 'Use a strict standing press.' },
+            { name: 'Weighted Dip', sets: 4, reps: '8', weight: 25, unit: 'lbs', notes: 'Add load only if shoulders feel good.' },
+            { name: 'Cable Fly', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: 'Squeeze hard in the midline.' },
+          ],
+        },
+        Tuesday: {
+          name: 'Pull Power',
+          focus: 'Deadlift / Row / Biceps',
+          exercises: [
+            { name: 'Deadlift', sets: 4, reps: '4', weight: 255, unit: 'lbs', notes: 'Keep the bar close off the floor.' },
+            { name: 'Pendlay Row', sets: 4, reps: '6', weight: 145, unit: 'lbs', notes: 'Reset each rep on the floor.' },
+            { name: 'Weighted Pull-up', sets: 4, reps: '6', weight: 15, unit: 'lbs', notes: 'Use full range.' },
+            { name: 'EZ-Bar Curl', sets: 3, reps: '10', weight: 60, unit: 'lbs', notes: 'Lower with control.' },
+          ],
+        },
+        Wednesday: {
+          name: 'Legs Power',
+          focus: 'Squat / Posterior Chain',
+          exercises: [
+            { name: 'Barbell Back Squat', sets: 5, reps: '5', weight: 205, unit: 'lbs', notes: 'Brace before every rep.' },
+            { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 165, unit: 'lbs', notes: 'Push hips back hard.' },
+            { name: 'Leg Press', sets: 4, reps: '10', weight: 270, unit: 'lbs', notes: 'Control the descent.' },
+            { name: 'Standing Calf Raise', sets: 4, reps: '12', weight: 90, unit: 'lbs', notes: 'Pause at the top.' },
+          ],
+        },
+        Thursday: {
+          name: 'Push Volume',
+          focus: 'Chest / Shoulders / Triceps',
+          exercises: [
+            { name: 'Incline Dumbbell Press', sets: 4, reps: '10', weight: 60, unit: 'lbs', notes: 'Hard squeeze at the top.' },
+            { name: 'Seated Dumbbell Shoulder Press', sets: 4, reps: '10', weight: 45, unit: 'lbs', notes: 'Do not arch off the bench.' },
+            { name: 'Dumbbell Lateral Raise', sets: 4, reps: '15', weight: 20, unit: 'lbs', notes: 'Use strict reps.' },
+            { name: 'Rope Pushdown', sets: 3, reps: '15', weight: 35, unit: 'lbs', notes: 'Spread the rope at the bottom.' },
+          ],
+        },
+        Friday: {
+          name: 'Pull Volume',
+          focus: 'Lats / Upper Back / Arms',
+          exercises: [
+            { name: 'Lat Pulldown', sets: 4, reps: '10', weight: 100, unit: 'lbs', notes: 'Full stretch every rep.' },
+            { name: 'Seated Cable Row', sets: 4, reps: '12', weight: 90, unit: 'lbs', notes: 'Pause at your torso.' },
+            { name: 'Chest-Supported Rear Delt Fly', sets: 3, reps: '15', weight: 15, unit: 'lbs', notes: 'No momentum.' },
+            { name: 'Hammer Curl', sets: 3, reps: '12', weight: 30, unit: 'lbs', notes: 'Neutral grip throughout.' },
+          ],
+        },
+        Saturday: {
+          name: 'Legs Volume',
+          focus: 'Quads / Hamstrings / Glutes',
+          exercises: [
+            { name: 'Front Squat', sets: 4, reps: '8', weight: 155, unit: 'lbs', notes: 'Keep elbows high.' },
+            { name: 'Bulgarian Split Squat', sets: 3, reps: '10', weight: 30, unit: 'lbs', notes: '10 reps per leg.' },
+            { name: 'Lying Leg Curl', sets: 4, reps: '12', weight: 70, unit: 'lbs', notes: 'Slow eccentric.' },
+            { name: 'Walking Lunge', sets: 2, reps: '16', weight: 25, unit: 'lbs', notes: '16 total steps each leg.' },
+          ],
+        },
+      }, 5),
     },
     {
       coachEmail: 'coach.sarah@avgjoe.com',
@@ -569,6 +820,40 @@ async function main() {
       coverImageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&q=80',
       ratingAverage: 4.7,
       enrollmentCount: 521,
+      equipment: ['dumbbells', 'bench', 'cable machine', 'bodyweight'],
+      tags: ['beginner', 'full body', 'movement patterns', 'foundations'],
+      workoutPlan: buildWeeklyPlan(6, {
+        Monday: {
+          name: 'Full Body A',
+          focus: 'Squat / Push / Pull',
+          exercises: [
+            { name: 'Goblet Squat', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: 'Use this to learn bracing and depth.' },
+            { name: 'Dumbbell Bench Press', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: 'Pause lightly at the bottom.' },
+            { name: 'Seated Cable Row', sets: 3, reps: '12', weight: 50, unit: 'lbs', notes: 'Keep your chest tall.' },
+            { name: 'Dead Bug', sets: 3, reps: '10', weight: undefined, unit: 'reps', notes: '10 reps per side.' },
+          ],
+        },
+        Wednesday: {
+          name: 'Full Body B',
+          focus: 'Hinge / Press / Split Squat',
+          exercises: [
+            { name: 'Romanian Deadlift', sets: 3, reps: '10', weight: 45, unit: 'lbs', notes: 'Keep the dumbbells close.' },
+            { name: 'Half-Kneeling Dumbbell Press', sets: 3, reps: '10', weight: 15, unit: 'lbs', notes: '10 reps per arm.' },
+            { name: 'Lat Pulldown', sets: 3, reps: '12', weight: 45, unit: 'lbs', notes: 'Pull elbows down and back.' },
+            { name: 'Split Squat', sets: 3, reps: '8', weight: 15, unit: 'lbs', notes: '8 reps per leg.' },
+          ],
+        },
+        Friday: {
+          name: 'Full Body C',
+          focus: 'Lunge / Incline Press / Glutes',
+          exercises: [
+            { name: 'Reverse Lunge', sets: 3, reps: '8', weight: 15, unit: 'lbs', notes: '8 reps per leg.' },
+            { name: 'Incline Dumbbell Press', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: 'Smooth tempo.' },
+            { name: 'Assisted Pull-up', sets: 3, reps: '8', weight: undefined, unit: 'reps', notes: 'Use the lightest assistance that lets you stay crisp.' },
+            { name: 'Glute Bridge', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: 'Pause for one second at the top.' },
+          ],
+        },
+      }, 2.5),
     },
   ];
 
@@ -599,49 +884,94 @@ async function main() {
 
   // Upsert demo shared programs
   let programsSeeded = 0;
+  let repairedEnrollments = 0;
   for (const prog of DEMO_PROGRAMS) {
     const creatorId = coachMap.get(prog.coachEmail)!;
     const coach = DEMO_COACHES.find((c) => c.email === prog.coachEmail)!;
+    const serializedEquipment = JSON.stringify(prog.equipment ?? []);
+    const serializedTags = JSON.stringify(prog.tags ?? []);
+    const serializedWorkoutPlan = JSON.stringify(prog.workoutPlan ?? {});
+
     const existing = await prisma.sharedProgram.findFirst({
       where: { creatorId, name: prog.name },
     });
+    let sharedProgramId: string;
     if (existing) {
       await prisma.sharedProgram.update({
         where: { id: existing.id },
         data: {
+          creatorName: coach.name,
           description: prog.description,
+          category: prog.category,
+          difficulty: prog.difficulty,
+          durationWeeks: prog.durationWeeks,
+          daysPerWeek: prog.daysPerWeek,
           coverImageUrl: prog.coverImageUrl,
           creatorAvatar: coach.avatarUrl,
+          equipment: serializedEquipment,
+          tags: serializedTags,
+          workoutPlan: serializedWorkoutPlan,
           ratingAverage: prog.ratingAverage,
           enrollmentCount: prog.enrollmentCount,
         },
       });
-      continue;
+      sharedProgramId = existing.id;
+    } else {
+      const created = await prisma.sharedProgram.create({
+        data: {
+          creatorId,
+          creatorName: coach.name,
+          creatorAvatar: coach.avatarUrl,
+          coverImageUrl: prog.coverImageUrl,
+          name: prog.name,
+          description: prog.description,
+          category: prog.category,
+          difficulty: prog.difficulty,
+          durationWeeks: prog.durationWeeks,
+          daysPerWeek: prog.daysPerWeek,
+          ratingAverage: prog.ratingAverage,
+          enrollmentCount: prog.enrollmentCount,
+          equipment: serializedEquipment,
+          tags: serializedTags,
+          workoutPlan: serializedWorkoutPlan,
+          isPublished: true,
+        },
+      });
+      sharedProgramId = created.id;
+      programsSeeded++;
     }
-    await prisma.sharedProgram.create({
-      data: {
-        creatorId,
-        creatorName: coach.name,
-        creatorAvatar: coach.avatarUrl,
-        coverImageUrl: prog.coverImageUrl,
-        name: prog.name,
-        description: prog.description,
-        category: prog.category,
-        difficulty: prog.difficulty,
-        durationWeeks: prog.durationWeeks,
-        daysPerWeek: prog.daysPerWeek,
-        ratingAverage: prog.ratingAverage,
-        enrollmentCount: prog.enrollmentCount,
-        equipment: '[]',
-        tags: '[]',
-        workoutPlan: '{}',
-        isPublished: true,
-      },
+
+    const enrollmentsNeedingRepair = await prisma.programEnrollment.findMany({
+      where: { sharedProgramId },
+      select: { programId: true, userId: true },
     });
-    programsSeeded++;
+
+    for (const enrollment of enrollmentsNeedingRepair) {
+      const existingPlannedWorkoutCount = await prisma.plannedWorkout.count({
+        where: { programId: enrollment.programId },
+      });
+
+      if (existingPlannedWorkoutCount > 0) continue;
+
+      const workoutRows = expandWorkoutPlanToPlannedWorkouts(
+        prog.workoutPlan,
+        enrollment.programId,
+        enrollment.userId,
+      );
+
+      if (workoutRows.length === 0) continue;
+
+      await prisma.program.update({
+        where: { id: enrollment.programId },
+        data: { weeklyStructure: serializedWorkoutPlan },
+      });
+      await prisma.plannedWorkout.createMany({ data: workoutRows as any });
+      repairedEnrollments++;
+    }
   }
   if (programsSeeded > 0) console.log(`✅ ${programsSeeded} community programs seeded`);
   else console.log('Community programs already up to date');
+  if (repairedEnrollments > 0) console.log(`✅ Repaired ${repairedEnrollments} enrolled community programs missing schedules`);
 
   // Back-fill cover images for any shared programs that are missing one
   const FALLBACK_COVERS = [

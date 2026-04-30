@@ -55,8 +55,30 @@ const forkedPrismaProgram = {
   updatedAt: new Date(),
 };
 
+const realisticWorkoutPlan = {
+  week1: {
+    Monday: {
+      name: 'Full Body A',
+      focus: 'Squat / Push / Pull',
+      exercises: [
+        { name: 'Goblet Squat', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: 'Learn the pattern' },
+        { name: 'Dumbbell Bench Press', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: 'Smooth tempo' },
+      ],
+    },
+    Wednesday: {
+      name: 'Full Body B',
+      focus: 'Hinge / Press',
+      exercises: [
+        { name: 'Romanian Deadlift', sets: 3, reps: '8', weight: 45, unit: 'lbs', notes: 'Keep the weight close' },
+      ],
+    },
+  },
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
+  (prisma.program.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+  (prisma.plannedWorkout.createMany as jest.Mock).mockResolvedValue({ count: 0 });
 });
 
 // ─── createSharedProgram ─────────────────────────────────────────────────────
@@ -242,6 +264,59 @@ describe('enrollInProgram', () => {
     expect(enrollArg.data).toMatchObject({ userId: USER_ID, sharedProgramId: 'sp-1' });
 
     expect(result).toMatchObject({ forkedProgramId: forkedPrismaProgram.id });
+  });
+
+  it('expands a real workout plan into planned workouts during enrollment', async () => {
+    (prisma.programEnrollment.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.program.create as jest.Mock).mockResolvedValue(forkedPrismaProgram);
+    (prisma.programEnrollment.create as jest.Mock).mockResolvedValue({
+      id: 'enroll-2',
+      userId: USER_ID,
+      sharedProgramId: 'sp-real-plan',
+      programId: forkedPrismaProgram.id,
+      enrolledAt: new Date(),
+    });
+    (prisma.sharedProgram.update as jest.Mock).mockResolvedValue({
+      ...baseSharedProgram,
+      id: 'sp-real-plan',
+      enrollmentCount: 1,
+    });
+
+    await sharedProgramService.enrollInProgram(
+      USER_ID,
+      'sp-real-plan',
+      {
+        ...baseSharedProgram,
+        id: 'sp-real-plan',
+        workoutPlan: realisticWorkoutPlan,
+      } as any,
+    );
+
+    expect(prisma.plannedWorkout.createMany).toHaveBeenCalledTimes(1);
+    const createManyArg = (prisma.plannedWorkout.createMany as jest.Mock).mock.calls[0][0];
+    expect(createManyArg.data).toHaveLength(2);
+    expect(createManyArg.data[0]).toMatchObject({
+      programId: forkedPrismaProgram.id,
+      userId: USER_ID,
+      weekNumber: 1,
+      dayOfWeek: 'Monday',
+      name: 'Full Body A',
+      focus: 'Squat / Push / Pull',
+      isCompleted: false,
+    });
+    const plannedExercises = JSON.parse(createManyArg.data[0].exercises);
+    expect(plannedExercises).toHaveLength(2);
+    expect(plannedExercises[0]).toMatchObject({
+      name: 'Goblet Squat',
+      orderIndex: 0,
+      notes: 'Learn the pattern',
+    });
+    expect(plannedExercises[0].sets[0]).toMatchObject({
+      setNumber: 1,
+      targetReps: 10,
+      targetWeight: 25,
+      unit: 'lbs',
+    });
   });
 
   it('throws 400 if the user is already enrolled in the program', async () => {
