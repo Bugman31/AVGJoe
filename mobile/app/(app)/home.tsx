@@ -203,7 +203,7 @@ export default function HomeScreen() {
           <TouchableOpacity style={styles.setupCard} onPress={() => router.push('/(app)/program')}>
             <Ionicons name="calendar-outline" size={32} color={theme.colors.primary} style={{ marginBottom: 10 }} />
             <Text style={styles.setupTitle}>Set up your training program</Text>
-            <Text style={styles.setupSubtitle}>Complete onboarding and let AI build your personalized plan</Text>
+            <Text style={styles.setupSubtitle}>Choose a community program or build a personalized one with AI.</Text>
             <View style={styles.setupCta}>
               <Text style={styles.setupCtaText}>Get Started</Text>
               <Ionicons name="arrow-forward" size={16} color={theme.colors.primary} />

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { theme, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +24,11 @@ const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 export default function ProgramScreen() {
   const { user, refreshUser } = useAuth();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const showOnboardingPrompt = onboarding === '1';
+  const router = useRouter();
+  const { program, isLoading, reload, currentWeekWorkouts } = useActiveProgram();
+  const { startProgramWorkout } = useSession();
 
   // Refresh user and active program on every visit
   useFocusEffect(
@@ -32,9 +37,6 @@ export default function ProgramScreen() {
       reload();
     }, [refreshUser, reload])
   );
-  const router = useRouter();
-  const { program, isLoading, reload, currentWeekWorkouts } = useActiveProgram();
-  const { startProgramWorkout } = useSession();
   const [analyses, setAnalyses] = useState<WeeklyAnalysis[]>([]);
   const [analyzingWeek, setAnalyzingWeek] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,6 +130,20 @@ export default function ProgramScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {!program && showOnboardingPrompt && (
+          <View style={styles.onboardingPrompt}>
+            <View style={styles.onboardingPromptIcon}>
+              <Ionicons name="sparkles-outline" size={18} color={theme.colors.primary} />
+            </View>
+            <View style={styles.onboardingPromptBody}>
+              <Text style={styles.onboardingPromptTitle}>Choose your first program</Text>
+              <Text style={styles.onboardingPromptText}>
+                Your goals are saved. Now pick a community program or build one with AI to get your training started.
+              </Text>
+            </View>
+          </View>
+        )}
 
 
         {!program ? (
@@ -352,6 +368,27 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   screenTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
+  onboardingPrompt: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  onboardingPromptIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  onboardingPromptBody: { flex: 1, gap: 4 },
+  onboardingPromptTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  onboardingPromptText: { fontSize: 13, lineHeight: 19, color: theme.colors.textSecondary },
   browseBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
   browseBtnText: { fontSize: 13, color: theme.colors.primary, fontWeight: '600' },
   generateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.primary },

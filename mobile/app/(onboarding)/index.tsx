@@ -130,7 +130,7 @@ export default function OnboardingScreen() {
     ? returnTo
     : isEditMode
       ? '/(app)/profile'
-      : '/(app)/home';
+      : '/welcome?returnTo=/(app)/program%3Fonboarding%3D1';
   const { user, refreshUser } = useAuth();
   const {
     data,
