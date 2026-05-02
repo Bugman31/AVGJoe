@@ -8,11 +8,7 @@ declare global {
         email: string;
         name: string | null;
         onboardingCompleted: boolean;
-        hasAnthropicKey: boolean;
-        hasOpenAiKey: boolean;
-        serverHasAiKey: boolean;
         paidProgramsEnabled: boolean;
-        aiProvider: 'anthropic' | 'openai';
       };
     }
   }

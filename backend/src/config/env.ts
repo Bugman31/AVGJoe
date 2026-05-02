@@ -4,9 +4,6 @@ import 'dotenv/config';
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
-  ANTHROPIC_API_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  ENCRYPTION_KEY: z.string().optional(),
   PORT: z.string().default('8000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ENABLE_PAID_PROGRAMS: z.string().default('false'),

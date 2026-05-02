@@ -19,7 +19,6 @@ import Toast from 'react-native-toast-message';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme, type ThemeMode } from '@/context/ThemeContext';
@@ -32,8 +31,6 @@ import {
   requestPermissions,
 } from '@/lib/healthkit';
 
-type AiProvider = 'anthropic' | 'openai';
-
 export default function ProfileScreen() {
   const { user, refreshUser, logout } = useAuth();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -41,9 +38,6 @@ export default function ProfileScreen() {
 
   const [name, setName] = useState(user?.name ?? '');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [anthropicKey, setAnthropicKey] = useState('');
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [aiProvider, setAiProvider] = useState<AiProvider>(user?.aiProvider ?? 'anthropic');
   const [isSaving, setIsSaving] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -119,7 +113,6 @@ export default function ProfileScreen() {
   async function pickAvatarFromLibrary() {
     setIsUploadingAvatar(true);
     try {
-      // Dynamic import — works with or without expo-image-picker installed
       let ImagePicker: typeof import('expo-image-picker');
       try {
         ImagePicker = await import('expo-image-picker');
@@ -177,15 +170,10 @@ export default function ProfileScreen() {
     try {
       await api.put('/api/auth/me', {
         name: name.trim() || undefined,
-        anthropicApiKey: anthropicKey.trim() || undefined,
-        openaiApiKey: openaiKey.trim() || undefined,
-        aiProvider,
         ...(newPassword ? { currentPassword, newPassword } : {}),
       });
       await refreshUser();
       Toast.show({ type: 'success', text1: 'Profile updated' });
-      setAnthropicKey('');
-      setOpenaiKey('');
       setCurrentPassword('');
       setNewPassword('');
       setShowChangePassword(false);
@@ -214,7 +202,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
       </View>
@@ -251,15 +239,6 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <Text style={styles.userName}>{user?.name ?? 'Unnamed User'}</Text>
             <Text style={styles.userEmail}>{user?.email}</Text>
-            <View style={styles.badges}>
-              {(user?.hasAnthropicKey || user?.hasOpenAiKey) ? (
-                <Badge variant="accent">
-                  {user?.aiProvider === 'openai' ? 'ChatGPT Active' : 'Claude Active'}
-                </Badge>
-              ) : (
-                <Badge variant="default">No AI Provider</Badge>
-              )}
-            </View>
           </Card>
 
           {/* Training profile */}
@@ -371,7 +350,6 @@ export default function ProfileScreen() {
               testID="name-input"
             />
 
-            {/* Change Password */}
             <TouchableOpacity
               style={styles.changePasswordRow}
               onPress={() => setShowChangePassword((v) => !v)}
@@ -406,94 +384,13 @@ export default function ProfileScreen() {
             )}
           </Card>
 
-          {/* AI Provider */}
-          <Card>
-            <Text style={styles.sectionTitle}>AI Provider</Text>
-            {user?.serverHasAiKey ? (
-              <>
-                <View style={styles.serverKeyBanner}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
-                  <Text style={styles.serverKeyText}>AI is powered by the app — no key needed.</Text>
-                </View>
-                <Text style={styles.hint}>Optionally, use your own key below to override the app default.</Text>
-              </>
-            ) : (
-              <Text style={styles.hint}>Add your own API key to enable AI-powered program generation.</Text>
-            )}
-            <View style={styles.providerToggle}>
-              <TouchableOpacity
-                style={[styles.providerBtn, aiProvider === 'anthropic' && styles.providerBtnActive]}
-                onPress={() => setAiProvider('anthropic')}
-              >
-                <Text style={[styles.providerBtnText, aiProvider === 'anthropic' && styles.providerBtnTextActive]}>
-                  Claude (Anthropic)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.providerBtn, aiProvider === 'openai' && styles.providerBtnActive]}
-                onPress={() => setAiProvider('openai')}
-              >
-                <Text style={[styles.providerBtnText, aiProvider === 'openai' && styles.providerBtnTextActive]}>
-                  ChatGPT (OpenAI)
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {aiProvider === 'anthropic' ? (
-              <>
-                <Input
-                  label={user?.serverHasAiKey ? 'Your Anthropic Key (optional override)' : 'Anthropic API Key'}
-                  value={anthropicKey}
-                  onChangeText={setAnthropicKey}
-                  placeholder={user?.hasAnthropicKey ? '••••••• (saved)' : 'sk-ant-...'}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  testID="api-key-input"
-                />
-                {!user?.serverHasAiKey && (
-                  <TouchableOpacity
-                    style={styles.getKeyLink}
-                    onPress={() => Linking.openURL('https://console.anthropic.com/settings/keys')}
-                  >
-                    <Ionicons name="open-outline" size={13} color={colors.accent} />
-                    <Text style={styles.getKeyText}>Get your Anthropic API key →</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : (
-              <>
-                <Input
-                  label={user?.serverHasAiKey ? 'Your OpenAI Key (optional override)' : 'OpenAI API Key'}
-                  value={openaiKey}
-                  onChangeText={setOpenaiKey}
-                  placeholder={user?.hasOpenAiKey ? '••••••• (saved)' : 'sk-...'}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  testID="openai-key-input"
-                />
-                {!user?.serverHasAiKey && (
-                  <TouchableOpacity
-                    style={styles.getKeyLink}
-                    onPress={() => Linking.openURL('https://platform.openai.com/api-keys')}
-                  >
-                    <Ionicons name="open-outline" size={13} color={colors.accent} />
-                    <Text style={styles.getKeyText}>Get your OpenAI API key →</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-            <Text style={styles.hint}>Your key is stored encrypted and never shared.</Text>
-          </Card>
-
-          {/* Single unified save */}
           <Button
             onPress={handleSave}
             loading={isSaving}
             size="lg"
             testID="save-btn"
           >
-            Save All Changes
+            Save Changes
           </Button>
 
           <Button onPress={confirmLogout} variant="danger" size="lg" testID="logout-btn">
@@ -533,26 +430,7 @@ const styles = StyleSheet.create({
   },
   userName: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   userEmail: { fontSize: typography.sm, color: colors.textSecondary },
-  badges: { flexDirection: 'row', gap: spacing.sm },
   sectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
-  hint: { fontSize: typography.xs, color: colors.textMuted, marginTop: spacing.xs },
-  serverKeyBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
-  serverKeyText: { fontSize: typography.sm, color: colors.accent, fontWeight: '600' },
-  getKeyLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: spacing.xs,
-  },
-  getKeyText: { fontSize: typography.xs, color: colors.accent, fontWeight: '600' },
-  providerToggle: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
-  providerBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
-    borderColor: colors.border, alignItems: 'center',
-  },
-  providerBtnActive: { borderColor: colors.accent, backgroundColor: colors.accent + '20' },
-  providerBtnText: { fontSize: typography.sm, fontWeight: '600', color: colors.textSecondary },
-  providerBtnTextActive: { color: colors.accent },
   themeRow: { flexDirection: 'row', gap: spacing.sm },
   themeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

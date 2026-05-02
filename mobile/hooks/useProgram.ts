@@ -5,7 +5,6 @@ import type { Program, WeeklyAnalysis } from '@/types';
 export function useProgram() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -23,22 +22,7 @@ export function useProgram() {
 
   useEffect(() => { load(); }, [load]);
 
-  const generateProgram = useCallback(async (customization?: string) => {
-    setIsGenerating(true);
-    setError(null);
-    try {
-      const res = await api.post<{ program: Program }>('/api/ai/generate-program', { customization });
-      setPrograms((prev) => [res.program, ...prev]);
-      return res.program;
-    } catch (e) {
-      setError((e as Error).message);
-      throw e;
-    } finally {
-      setIsGenerating(false);
-    }
-  }, []);
-
-  const archiveProgram = useCallback(async (programId: string) => {
+const archiveProgram = useCallback(async (programId: string) => {
     await api.patch(`/api/programs/${programId}/status`, { status: 'archived' });
     await load();
   }, [load]);
@@ -53,5 +37,5 @@ export function useProgram() {
     return res.analysis;
   }, []);
 
-  return { programs, isLoading, isGenerating, error, reload: load, generateProgram, archiveProgram, getAnalyses, triggerWeeklyAnalysis };
+  return { programs, isLoading, error, reload: load, archiveProgram, getAnalyses, triggerWeeklyAnalysis };
 }

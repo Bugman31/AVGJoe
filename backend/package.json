@@ -14,7 +14,6 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
     "@prisma/client": "^5.22.0",
     "@types/compression": "^1.8.1",
     "@types/morgan": "^1.9.10",
@@ -27,7 +26,6 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "openai": "^6.33.0",
     "zod": "^3.23.8"
   },
   "prisma": {

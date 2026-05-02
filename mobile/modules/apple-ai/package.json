@@ -1,0 +1,11 @@
+{
+  "name": "apple-ai",
+  "version": "1.0.0",
+  "description": "Expo module for Apple Foundation Models on-device AI",
+  "main": "src/index",
+  "types": "src/index",
+  "scripts": {},
+  "dependencies": {
+    "expo-modules-core": "*"
+  }
+}

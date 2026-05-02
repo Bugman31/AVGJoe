@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.avgjoe.workouttracker",
-      "buildNumber": "12",
+      "buildNumber": "15",
       "entitlements": {
         "com.apple.developer.healthkit": true,
         "com.apple.developer.healthkit.access": []
@@ -47,6 +47,7 @@
         }
       ]
     ],
+    "newArchEnabled": true,
     "scheme": "avgjoe",
     "extra": {
       "eas": {

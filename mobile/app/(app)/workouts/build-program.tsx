@@ -31,6 +31,7 @@ import DraggableFlatList, {
 } from 'react-native-draggable-flatlist';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { generateText } from 'apple-ai';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
 import { Button } from '@/components/ui/Button';
 import { ExercisePickerModal, type PickedExercise } from '@/components/workouts/ExercisePickerModal';
@@ -250,7 +251,7 @@ interface SetupStepProps {
   totalWeeks: number; setTotalWeeks: (v: number) => void;
   selectedDays: string[]; toggleDay: (d: string) => void;
   onNext: () => void;
-  onAiGenerate: (customization: string, totalWeeks: number) => void;
+  onAiGenerate: (customization: string, totalWeeks: number, profile: ProfileRecord) => void;
   isGenerating: boolean;
   hasActiveProgram: boolean;
 }
@@ -275,22 +276,10 @@ function SetupStep({
     }
   }, [aiExpanded]);
 
-  const hasAiKey = !!(user?.serverHasAiKey || user?.hasAnthropicKey || user?.hasOpenAiKey);
   const profileComplete = profile && profile.onboardingCompleted;
   const summaryLines = profile ? profileSummaryLines(profile) : [];
 
   function handleGenerate() {
-    if (!hasAiKey) {
-      Alert.alert(
-        'No AI Key',
-        'Add an Anthropic or OpenAI key in your Profile settings, or ask your admin to configure a server key.',
-        [
-          { text: 'Go to Profile', onPress: () => router.push('/(app)/profile') },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-      return;
-    }
     if (!profileComplete) {
       Alert.alert(
         'Profile Incomplete',
@@ -308,7 +297,7 @@ function SetupStep({
       );
       return;
     }
-    onAiGenerate(customization, totalWeeks);
+    onAiGenerate(customization, totalWeeks, profile);
   }
 
   return (
@@ -390,19 +379,6 @@ function SetupStep({
                   <Text key={i} style={s1.profileLine}>{line}</Text>
                 ))}
               </View>
-            )}
-
-            {/* ── No AI key warning ── */}
-            {!hasAiKey && (
-              <TouchableOpacity
-                style={s1.keyWarning}
-                onPress={() => router.push('/(app)/profile')}
-              >
-                <Ionicons name="key-outline" size={14} color={colors.warning} />
-                <Text style={s1.keyWarningText}>
-                  No AI key detected — tap to add one in Profile, or ask your admin to configure a server key.
-                </Text>
-              </TouchableOpacity>
             )}
 
             {/* ── Customization ── */}
@@ -1001,17 +977,66 @@ export default function BuildProgramScreen() {
     setStep(2);
   }
 
-  async function handleAiGenerate(customization: string, requestedWeeks: number) {
+  async function handleAiGenerate(customization: string, requestedWeeks: number, profile: ProfileRecord) {
     setIsGenerating(true);
     try {
-      const res = await api.post<{ preview: AiPreview }>(
-        '/api/ai/preview-program',
+      const systemPrompt = `You are an expert certified personal trainer. Generate a multi-week strength training program as a single JSON object. Return ONLY valid JSON with no markdown, no explanation, no code fences.
+
+JSON schema:
+{
+  "programName": string,
+  "totalWeeks": number,
+  "workouts": [
+    {
+      "weekNumber": number,
+      "dayOfWeek": string (e.g. "Monday"),
+      "name": string,
+      "focus": string,
+      "exercises": [
         {
-          customization: customization.trim() || undefined,
-          totalWeeks: requestedWeeks,
+          "name": string,
+          "orderIndex": number (0-based),
+          "notes": string,
+          "sets": [
+            { "setNumber": number, "targetReps": number | null, "targetWeight": number | null, "unit": string }
+          ]
         }
-      );
-      const parsed = aiPreviewToWeekData(res.preview);
+      ]
+    }
+  ]
+}
+
+Rules:
+- Progressive overload week over week
+- Each workout should have 4–7 exercises
+- 3–5 sets per exercise
+- Use evidence-based rep ranges (hypertrophy: 6–12, strength: 3–6)
+- Keep exercise selection identical across weeks; vary load/reps for progression`;
+
+      const profileLines: string[] = [];
+      if (profile.primaryGoal) profileLines.push(`Goal: ${fmt(profile.primaryGoal)}`);
+      if (profile.experienceLevel) profileLines.push(`Fitness level: ${fmt(profile.experienceLevel)}`);
+      if (profile.daysPerWeek) profileLines.push(`Training days per week: ${profile.daysPerWeek}`);
+      if (profile.sessionDurationMins) profileLines.push(`Session duration: ${profile.sessionDurationMins} minutes`);
+      if (profile.preferredSplit) profileLines.push(`Preferred split: ${fmt(profile.preferredSplit)}`);
+      if (profile.workoutEnvironment) profileLines.push(`Environment: ${fmt(profile.workoutEnvironment)}`);
+      if (Array.isArray(profile.availableEquipment) && profile.availableEquipment.length)
+        profileLines.push(`Equipment: ${(profile.availableEquipment as string[]).join(', ')}`);
+      if (Array.isArray(profile.injuryFlags) && profile.injuryFlags.length)
+        profileLines.push(`Injuries/limitations: ${(profile.injuryFlags as string[]).join(', ')}`);
+      profileLines.push(`Total weeks: ${requestedWeeks}`);
+      if (customization.trim()) profileLines.push(`Additional notes: ${customization.trim()}`);
+
+      const raw = await generateText(systemPrompt, profileLines.join('\n'));
+      let preview: AiPreview;
+      try {
+        const cleaned = raw.replace(/```(?:json)?\n?/g, '').trim();
+        preview = JSON.parse(cleaned) as AiPreview;
+      } catch {
+        throw new Error('The AI returned an invalid response. Please try again.');
+      }
+
+      const parsed = aiPreviewToWeekData(preview);
       setName(parsed.name);
       setTotalWeeks(parsed.totalWeeks);
       setSelectedDays(parsed.days);
@@ -1545,23 +1570,6 @@ const s1 = StyleSheet.create({
     fontSize: typography.sm,
     color: colors.textSecondary,
     marginBottom: 4,
-  },
-  // No AI key warning
-  keyWarning: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: colors.warning + '18',
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.warning + '50',
-    padding: spacing.sm,
-  },
-  keyWarningText: {
-    flex: 1,
-    fontSize: typography.xs,
-    color: colors.warning,
-    lineHeight: 16,
   },
   // Customization label
   inputLabel: {

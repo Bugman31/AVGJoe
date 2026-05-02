@@ -5,11 +5,7 @@ export interface User {
   email: string;
   name: string | null;
   avatarUrl?: string | null;
-  hasAnthropicKey?: boolean;
-  hasOpenAiKey?: boolean;
-  serverHasAiKey?: boolean;
   paidProgramsEnabled?: boolean;
-  aiProvider?: 'anthropic' | 'openai';
   onboardingCompleted?: boolean;
   createdAt?: string;
 }

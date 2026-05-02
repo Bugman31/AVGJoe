@@ -30,6 +30,39 @@ export interface ListSharedProgramsOpts {
   sort?: 'popular' | 'top_rated' | 'newest' | string;
 }
 
+export interface SharedProgramRecord extends Record<string, unknown> {
+  id: string;
+  creatorId?: string;
+  creatorName: string;
+  creatorAvatar?: string | null;
+  coverImageUrl?: string | null;
+  name: string;
+  description?: string | null;
+  category: string;
+  difficulty: string;
+  durationWeeks: number;
+  daysPerWeek: number;
+  equipment: string[];
+  tags: string[];
+  workoutPlan: Record<string, unknown>;
+  price?: number;
+  currency?: string;
+  ratingAverage?: number;
+  enrollmentCount?: number;
+  isPublished?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return (value as T) ?? fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 function serializeProgram(data: CreateSharedProgramData) {
   return {
     equipment: JSON.stringify(data.equipment ?? []),
@@ -38,13 +71,13 @@ function serializeProgram(data: CreateSharedProgramData) {
   };
 }
 
-function deserializeProgram(sp: Record<string, unknown>) {
+function deserializeProgram(sp: Record<string, unknown>): SharedProgramRecord {
   return {
     ...sp,
-    equipment: typeof sp.equipment === 'string' ? JSON.parse(sp.equipment) : sp.equipment,
-    tags: typeof sp.tags === 'string' ? JSON.parse(sp.tags) : sp.tags,
-    workoutPlan: typeof sp.workoutPlan === 'string' ? JSON.parse(sp.workoutPlan) : sp.workoutPlan,
-  };
+    equipment: parseJson(sp.equipment, [] as string[]),
+    tags: parseJson(sp.tags, [] as string[]),
+    workoutPlan: parseJson(sp.workoutPlan, {} as Record<string, unknown>),
+  } as SharedProgramRecord;
 }
 
 export async function createSharedProgram(
@@ -77,7 +110,7 @@ export async function createSharedProgram(
     },
   });
 
-  return sp;
+  return deserializeProgram(sp);
 }
 
 export async function listSharedPrograms(opts: ListSharedProgramsOpts) {
@@ -95,6 +128,8 @@ export async function listSharedPrograms(opts: ListSharedProgramsOpts) {
     where.OR = [
       { name: { contains: opts.q } },
       { description: { contains: opts.q } },
+      { tags: { contains: opts.q } },
+      { equipment: { contains: opts.q } },
     ];
   }
 
@@ -108,7 +143,7 @@ export async function listSharedPrograms(opts: ListSharedProgramsOpts) {
   }
 
   const results = await prisma.sharedProgram.findMany({ where, orderBy });
-  return results;
+  return results.map((result) => deserializeProgram(result as Record<string, unknown>));
 }
 
 export async function getSharedProgram(id: string) {
@@ -116,11 +151,32 @@ export async function getSharedProgram(id: string) {
   if (!sp) {
     throw makeError('Shared program not found', 404);
   }
-  return sp;
+  return deserializeProgram(sp as Record<string, unknown>);
+}
+
+function normalizeSets(exercise: Record<string, unknown>) {
+  if (Array.isArray(exercise.sets)) {
+    return exercise.sets.map((set, index) => {
+      const rawSet = set as Record<string, unknown>;
+      return {
+        setNumber: typeof rawSet.setNumber === 'number' ? rawSet.setNumber : index + 1,
+        targetReps: parseRepString(rawSet.targetReps as string | number | undefined),
+        targetWeight: typeof rawSet.targetWeight === 'number' ? rawSet.targetWeight : null,
+        unit: (rawSet.unit as string) ?? 'kg',
+      };
+    });
+  }
+
+  return Array.from({ length: Number(exercise.sets) || 3 }, (_, i) => ({
+    setNumber: i + 1,
+    targetReps: parseRepString(exercise.reps as string | number | undefined),
+    targetWeight: typeof exercise.weight === 'number' ? exercise.weight : null,
+    unit: (exercise.unit as string) ?? 'kg',
+  }));
 }
 
 // workoutPlan JSON shape from shared programs:
-// { week1: { Monday: { name, focus, exercises: [{name, sets, reps, weight, unit, notes}] } } }
+// { week1: { Monday: { name, focus, estimatedDuration, coachNotes, exercises: [...] } } }
 function expandWorkoutPlanToPlannedWorkouts(
   workoutPlan: unknown,
   programId: string,
@@ -130,26 +186,17 @@ function expandWorkoutPlanToPlannedWorkouts(
   const rows: Array<Parameters<typeof prisma.plannedWorkout.create>[0]['data']> = [];
 
   for (const [weekKey, days] of Object.entries(plan as Record<string, unknown>)) {
-    // weekKey: "week1", "week2", etc.
     const weekNumber = parseInt(weekKey.replace(/\D/g, ''), 10);
     if (isNaN(weekNumber)) continue;
 
     for (const [dayName, session] of Object.entries(days as Record<string, unknown>)) {
       const s = session as Record<string, unknown>;
-
-      // Convert the compact exercise format used in seedPrograms into the
-      // PlannedExercise shape that the active workout screen expects.
       const rawExercises = Array.isArray(s.exercises) ? s.exercises : [];
       const plannedExercises = rawExercises.map((ex: Record<string, unknown>, idx: number) => ({
         name: ex.name ?? 'Exercise',
         orderIndex: idx,
         notes: ex.notes ?? null,
-        sets: Array.from({ length: Number(ex.sets) || 3 }, (_, i) => ({
-          setNumber: i + 1,
-          targetReps: parseRepString(ex.reps as string | number | undefined),
-          targetWeight: typeof ex.weight === 'number' ? ex.weight : null,
-          unit: (ex.unit as string) ?? 'kg',
-        })),
+        sets: normalizeSets(ex),
       }));
 
       rows.push({
@@ -159,11 +206,11 @@ function expandWorkoutPlanToPlannedWorkouts(
         dayOfWeek: dayName,
         name: (s.name as string) ?? dayName,
         focus: (s.focus as string) ?? null,
-        warmup: JSON.stringify([]),
+        warmup: JSON.stringify(Array.isArray(s.warmup) ? s.warmup : []),
         exercises: JSON.stringify(plannedExercises),
-        conditioning: null,
-        coachNotes: null,
-        estimatedDuration: null,
+        conditioning: s.conditioning ? JSON.stringify(s.conditioning) : null,
+        coachNotes: typeof s.coachNotes === 'string' ? s.coachNotes : null,
+        estimatedDuration: typeof s.estimatedDuration === 'number' ? s.estimatedDuration : null,
         isCompleted: false,
       });
     }
@@ -172,7 +219,6 @@ function expandWorkoutPlanToPlannedWorkouts(
   return rows;
 }
 
-// Parse "5", "8-12", "10-15", 10 → the lower bound as a number (or null)
 function parseRepString(reps: string | number | undefined): number | null {
   if (reps == null) return null;
   if (typeof reps === 'number') return reps;
@@ -184,15 +230,15 @@ function parseRepString(reps: string | number | undefined): number | null {
 export async function enrollInProgram(
   userId: string,
   sharedProgramId: string,
-  sharedProgram: {
-    id: string;
-    name: string;
-    workoutPlan: unknown;
-    durationWeeks?: unknown;
-    [key: string]: unknown;
-  },
+  sharedProgram: SharedProgramRecord,
 ) {
-  // Remove any previous enrollment so the user can re-enroll (restart the program)
+  const existingEnrollment = await prisma.programEnrollment.findFirst({
+    where: { userId, sharedProgramId },
+  });
+  if (existingEnrollment) {
+    throw makeError('You are already enrolled in this program', 400);
+  }
+
   await prisma.programEnrollment.deleteMany({
     where: { userId, sharedProgramId },
   });
@@ -201,13 +247,11 @@ export async function enrollInProgram(
     ? sharedProgram.durationWeeks
     : 4;
 
-  // Archive any currently active program
   await prisma.program.updateMany({
     where: { userId, status: 'active' },
     data: { status: 'archived' },
   });
 
-  // Fork the program + create PlannedWorkout rows in one transaction
   const workoutPlan = typeof sharedProgram.workoutPlan === 'string'
     ? sharedProgram.workoutPlan
     : JSON.stringify(sharedProgram.workoutPlan ?? {});
@@ -224,7 +268,6 @@ export async function enrollInProgram(
     },
   });
 
-  // Expand workoutPlan JSON into individual PlannedWorkout rows
   const workoutRows = expandWorkoutPlanToPlannedWorkouts(
     sharedProgram.workoutPlan,
     forkedProgram.id,
@@ -235,7 +278,6 @@ export async function enrollInProgram(
     await prisma.plannedWorkout.createMany({ data: workoutRows as any });
   }
 
-  // Create enrollment record
   await prisma.programEnrollment.create({
     data: {
       userId,
@@ -244,7 +286,6 @@ export async function enrollInProgram(
     },
   });
 
-  // Increment enrollment count
   await prisma.sharedProgram.update({
     where: { id: sharedProgramId },
     data: { enrollmentCount: { increment: 1 } },
@@ -259,12 +300,10 @@ export async function rateProgram(
   rating: number,
   review?: string,
 ) {
-  // Validate rating
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     throw makeError('Rating must be an integer between 1 and 5', 400);
   }
 
-  // Check for existing rating
   const existingRating = await prisma.programRating.findFirst({
     where: { userId, sharedProgramId },
   });
@@ -272,7 +311,6 @@ export async function rateProgram(
     throw makeError('You have already rated this program', 409);
   }
 
-  // Create rating
   const newRating = await prisma.programRating.create({
     data: {
       userId,
@@ -282,7 +320,6 @@ export async function rateProgram(
     },
   });
 
-  // Recalculate average rating from all ratings for this program
   const allRatings = (await prisma.programRating.findMany({
     where: { sharedProgramId },
   })) ?? [];

@@ -34,6 +34,7 @@ import { AICoachCard } from '@/components/workouts/AICoachCard';
 import { RestTimerModal } from '@/components/workouts/RestTimerModal';
 import { WorkoutSummaryBar } from '@/components/workouts/WorkoutSummaryBar';
 import { api } from '@/lib/api';
+import { generateText } from 'apple-ai';
 import { theme } from '@/lib/theme';
 import {
   isHealthKitAvailable,
@@ -433,33 +434,35 @@ export default function ActiveWorkoutScreen() {
       isLoading: true,
     });
 
-    // Fetch AI feedback (fire and forget; 5s timeout)
+    // Fetch AI feedback on-device (fire and forget; 5s timeout)
     try {
       const previousSet = setStates[isExtra ? `${exerciseKey}-${setNumber - 1}` : `${exerciseIdx}-${setNumber - 1}`];
       const prevSummary = previousSet?.logged && previousSet.actualReps
         ? `Set ${setNumber - 1}: ${previousSet.actualWeight ?? 'BW'} × ${previousSet.actualReps} @ RPE ${previousSet.rpe ?? '?'}`
         : undefined;
 
-      const feedbackRes = await Promise.race([
-        api.post<{ feedback: string }>('/api/ai/set-feedback', {
-          exerciseName,
-          setNumber,
-          targetSets: isExtra
-            ? (extraExercises.find((_, i) => `extra-${i}` === exerciseKey)?.sets ?? 3)
-            : (exercises.find((_, i) => i === exerciseIdx)?.sets.length ?? 3),
-          targetRepMin: targetRepMin ?? 1,
-          targetRepMax: targetRepMax ?? 99,
-          actualWeight: actualWeight ?? 0,
-          actualReps: actualReps ?? 0,
-          rpe: state.rpe ?? 7,
-          previousSetSummary: prevSummary,
-          recommendationReason: recommendation.reason,
-          userGoal: userProfile?.primaryGoal,
-        }),
+      const targetSets = isExtra
+        ? (extraExercises.find((_, i) => `extra-${i}` === exerciseKey)?.sets ?? 3)
+        : (exercises.find((_, i) => i === exerciseIdx)?.sets.length ?? 3);
+
+      const promptLines = [
+        `Exercise: ${exerciseName}`,
+        `Set ${setNumber} of ${targetSets}`,
+        `Target: ${targetRepMin ?? 1}–${targetRepMax ?? 99} reps`,
+        `Actual: ${actualWeight ?? 'BW'} × ${actualReps ?? 0} reps @ RPE ${state.rpe ?? 7}`,
+      ];
+      if (prevSummary) promptLines.push(`Previous: ${prevSummary}`);
+      if (userProfile?.primaryGoal) promptLines.push(`User goal: ${userProfile.primaryGoal}`);
+
+      const feedback = await Promise.race([
+        generateText(
+          'You are an expert strength coach giving real-time feedback after a set. Respond in 1–2 sentences. Be direct and specific. No medical advice.',
+          promptLines.join('\n'),
+        ),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
       ]);
       setAiCoach((prev) =>
-        prev ? { ...prev, feedback: feedbackRes.feedback, isLoading: false } : null
+        prev ? { ...prev, feedback, isLoading: false } : null
       );
     } catch {
       // On timeout/failure show the recommendation reason as fallback

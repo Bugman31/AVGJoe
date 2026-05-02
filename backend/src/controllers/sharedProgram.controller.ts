@@ -75,7 +75,7 @@ export async function enroll(req: Request, res: Response, next: NextFunction): P
     const result = await sharedProgramService.enrollInProgram(
       req.user.id,
       req.params.id,
-      sharedProgram as Parameters<typeof sharedProgramService.enrollInProgram>[2],
+      sharedProgram,
     );
     res.status(201).json(result);
   } catch (err) {

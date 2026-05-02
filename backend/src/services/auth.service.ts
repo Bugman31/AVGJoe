@@ -2,17 +2,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma';
 import { env } from '../config/env';
-import { encrypt } from '../utils/crypto';
 import { ensureReviewerDemoData, isReviewerEmail } from './reviewer.service';
-
-export type AiProvider = 'anthropic' | 'openai';
 
 interface UpdateProfileData {
   name?: string;
   avatarUrl?: string;
-  anthropicApiKey?: string;
-  openaiApiKey?: string;
-  aiProvider?: AiProvider;
 }
 
 interface SafeUser {
@@ -21,11 +15,7 @@ interface SafeUser {
   name: string | null;
   createdAt: Date;
   updatedAt: Date;
-  hasAnthropicKey: boolean;
-  hasOpenAiKey: boolean;
-  serverHasAiKey: boolean;
   paidProgramsEnabled: boolean;
-  aiProvider: AiProvider;
 }
 
 interface AuthUser extends SafeUser {
@@ -40,9 +30,6 @@ interface AuthResult {
 function toSafeUser(u: {
   id: string; email: string; name: string | null;
   createdAt: Date; updatedAt: Date;
-  anthropicApiKey: string | null;
-  openaiApiKey: string | null;
-  aiProvider: string;
 }): SafeUser {
   return {
     id: u.id,
@@ -50,11 +37,7 @@ function toSafeUser(u: {
     name: u.name,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
-    hasAnthropicKey: !!u.anthropicApiKey,
-    hasOpenAiKey: !!u.openaiApiKey,
-    serverHasAiKey: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY),
     paidProgramsEnabled: env.ENABLE_PAID_PROGRAMS === 'true',
-    aiProvider: (u.aiProvider as AiProvider) ?? 'anthropic',
   };
 }
 
@@ -81,7 +64,7 @@ export async function signup(
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: { email, passwordHash, name },
-    select: { id: true, email: true, name: true, createdAt: true, updatedAt: true, anthropicApiKey: true, openaiApiKey: true, aiProvider: true },
+    select: { id: true, email: true, name: true, createdAt: true, updatedAt: true },
   });
 
   if (isReviewerEmail(user.email)) {
@@ -139,14 +122,11 @@ export async function updateProfile(
 
   if (data.name !== undefined) updateData.name = data.name;
   if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl;
-  if (data.anthropicApiKey !== undefined) updateData.anthropicApiKey = encrypt(data.anthropicApiKey);
-  if (data.openaiApiKey !== undefined) updateData.openaiApiKey = encrypt(data.openaiApiKey);
-  if (data.aiProvider !== undefined) updateData.aiProvider = data.aiProvider;
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: updateData,
-    select: { id: true, email: true, name: true, createdAt: true, updatedAt: true, anthropicApiKey: true, openaiApiKey: true, aiProvider: true },
+    select: { id: true, email: true, name: true, createdAt: true, updatedAt: true },
   });
 
   return toSafeUser(user);

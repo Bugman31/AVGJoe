@@ -1,5 +1,4 @@
 import { prisma } from '../utils/prisma';
-import { generateWorkoutSummary } from './ai.service';
 import { markPlannedWorkoutComplete } from './program.service';
 import { recommend, type SetRecommendation } from './progression.service';
 
@@ -353,35 +352,8 @@ export async function completeSession(sessionId: string, userId: string, data: C
   const durationMinutes = Math.round((endTime.getTime() - session.startedAt.getTime()) / 60000);
 
   const { workoutScore, scoreLabel } = computeWorkoutScore(session.sets);
-
-  // Generate AI summary (synchronous, 15s timeout fallback)
-  let aiSummary: string | undefined;
-  let completionScore: number | undefined;
-  let performanceScore: number | undefined;
-
-  try {
-    const summaryResult = await Promise.race([
-      generateWorkoutSummary(userId, {
-        sessionName: session.name,
-        completedSets: session.sets,
-        preEnergyLevel: session.preEnergyLevel ?? undefined,
-        postEnergyLevel: data.postEnergyLevel,
-        sorenessLevel: data.sorenessLevel,
-        durationMinutes,
-        notes: data.notes,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI summary timeout')), 15000)
-      ),
-    ]);
-    aiSummary = JSON.stringify(summaryResult);
-    completionScore = summaryResult.completionScore;
-    performanceScore = summaryResult.performanceScore;
-  } catch {
-    // Fallback: no summary, generic scores
-    completionScore = session.sets.length > 0 ? 75 : 0;
-    performanceScore = 70;
-  }
+  const completionScore = session.sets.length > 0 ? 75 : 0;
+  const performanceScore = 70;
 
   const updated = await prisma.workoutSession.update({
     where: { id: sessionId },
@@ -394,7 +366,6 @@ export async function completeSession(sessionId: string, userId: string, data: C
       performanceScore,
       workoutScore,
       scoreLabel,
-      aiSummary,
     },
     include: {
       _count: { select: { sets: true } },

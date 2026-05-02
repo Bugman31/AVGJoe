@@ -20,6 +20,7 @@ import {
   type LiveWorkoutMetricsSnapshot,
 } from '@/lib/healthkit';
 import { theme } from '@/lib/theme';
+import { chat } from 'apple-ai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -50,6 +51,27 @@ const SUGGESTED_PROMPTS = [
   'How am I doing today?',
   'Should I stop or keep going?',
 ];
+
+function buildSystemPrompt(
+  workoutName: string,
+  setCount: number,
+  liveMetrics: LiveWorkoutMetricsSnapshot,
+): string {
+  const lines = [
+    'You are an expert strength coach giving real-time guidance during an active workout. Be direct and concise — keep every response under 60 words. No medical advice.',
+    `Current workout: ${workoutName}`,
+    `Sets logged so far: ${setCount}`,
+  ];
+
+  if (liveMetrics.status === 'live') {
+    if (liveMetrics.heartRate != null) lines.push(`Live heart rate: ${liveMetrics.heartRate} bpm (${liveMetrics.heartRateTrend ?? 'unknown'} trend)`);
+    if (liveMetrics.activeEnergyBurned != null) lines.push(`Active energy burned: ${liveMetrics.activeEnergyBurned} kcal`);
+  } else if (liveMetrics.status === 'stale') {
+    lines.push('Heart rate data is delayed.');
+  }
+
+  return lines.join('\n');
+}
 
 export default function CoachChatScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -87,20 +109,6 @@ export default function CoachChatScreen() {
     );
   }, [sessionStartedAt]);
 
-  function buildLiveMetricsPayload() {
-    if (liveMetrics.status === 'unsupported') return undefined;
-    return {
-      status: liveMetrics.status,
-      heartRate: liveMetrics.heartRate,
-      activeEnergyBurned: liveMetrics.activeEnergyBurned,
-      heartRateTrend: liveMetrics.heartRateTrend,
-      lastHeartRateSampleAt: liveMetrics.lastHeartRateSampleAt,
-      lastEnergySampleAt: liveMetrics.lastEnergySampleAt,
-      lastUpdatedAt: liveMetrics.lastUpdatedAt,
-      errorMessage: liveMetrics.errorMessage ?? null,
-    };
-  }
-
   function buildContextMetricsText() {
     if (liveMetrics.status === 'live' && liveMetrics.heartRate != null) {
       const hr = `${liveMetrics.heartRate} bpm`;
@@ -113,35 +121,29 @@ export default function CoachChatScreen() {
     return '';
   }
 
-  function getCoachErrorMessage(error: unknown) {
-    if (error instanceof Error && error.message.includes('Too many chat requests')) {
-      return 'You have hit the coach chat limit for now. Try again in a bit.';
-    }
-    return "Sorry, I couldn't reach the coach right now. Try again.";
-  }
-
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
 
     const userMsg: Message = { role: 'user', content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const res = await api.post<{ reply: string }>('/api/ai/coach-chat', {
-        sessionId,
-        message: userMsg.content,
-        conversationHistory: messages.slice(-6),
-        liveMetrics: buildLiveMetricsPayload(),
-      });
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }]);
+      const systemPrompt = buildSystemPrompt(
+        contextStrip?.name ?? 'Workout',
+        contextStrip?.setCount ?? 0,
+        liveMetrics,
+      );
+      const reply = await chat(systemPrompt, updatedMessages.slice(-7));
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: getCoachErrorMessage(error) },
-      ]);
+      const msg = error instanceof Error && error.message.includes('not available')
+        ? 'Apple Intelligence is not available on this device. Requires iPhone 15 Pro+ with iOS 18.1+.'
+        : "Sorry, I couldn't reach the coach right now. Try again.";
+      setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
     } finally {
       setIsLoading(false);
     }

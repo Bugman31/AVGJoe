@@ -24,7 +24,6 @@ jest.mock('@/context/AuthContext', () => ({
       name: 'Tester',
       email: 'tester@avgjoe.com',
       onboardingCompleted: true,
-      serverHasAiKey: true,
     },
   }),
 }));

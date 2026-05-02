@@ -45,6 +45,7 @@ export const prisma = {
   programEnrollment: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    deleteMany: jest.fn(),
     create: jest.fn(),
   },
   programRating: {

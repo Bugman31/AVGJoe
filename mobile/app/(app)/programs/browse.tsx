@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSharedPrograms } from '@/hooks/useSharedPrograms';
 import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { SharedProgram } from '@/types';
+import {
+  formatTag,
+  getProgramBodyFocus,
+  getProgramDurationMinutes,
+  matchesBodyFocus,
+  matchesDuration,
+} from '@/lib/programCatalog';
 
 const CATEGORIES: { label: string; value: string }[] = [
   { label: 'All', value: '' },
@@ -35,12 +42,60 @@ const DIFFICULTIES: { label: string; value: string }[] = [
   { label: 'Advanced', value: 'advanced' },
 ];
 
+const DURATIONS: { label: string; value: string }[] = [
+  { label: 'All Lengths', value: '' },
+  { label: '20 Min', value: '20_min' },
+  { label: '30 Min', value: '30_min' },
+  { label: '45 Min', value: '45_min' },
+  { label: '60 Min', value: '60_min' },
+];
+
+const BODY_FOCUS: { label: string; value: string }[] = [
+  { label: 'All Areas', value: '' },
+  { label: 'Full Body', value: 'full_body' },
+  { label: 'Upper Body', value: 'upper_body' },
+  { label: 'Lower Body', value: 'lower_body' },
+  { label: 'Back + Core', value: 'back_core' },
+  { label: 'Glutes + Legs', value: 'glutes_legs' },
+];
+
+function FilterPills({
+  items,
+  activeValue,
+  onPress,
+}: {
+  items: Array<{ label: string; value: string }>;
+  activeValue: string;
+  onPress: (item: { label: string; value: string }) => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow} style={styles.pillScroll}>
+      {items.map((item, index) => (
+        <TouchableOpacity
+          key={item.value || item.label}
+          style={[styles.pill, activeValue === item.value && styles.pillActive, index > 0 && styles.pillSpacing]}
+          onPress={() => onPress(item)}
+        >
+          <Text style={[styles.pillText, activeValue === item.value && styles.pillTextActive]}>{item.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
 export default function ProgramBrowseScreen() {
   const router = useRouter();
   const { programs, isLoading, error, search, setCategory, setDifficulty } = useSharedPrograms();
 
   const [activeCategory, setActiveCategory] = useState('');
   const [activeDifficulty, setActiveDifficulty] = useState('');
+  const [activeDuration, setActiveDuration] = useState('');
+  const [activeBodyFocus, setActiveBodyFocus] = useState('');
+
+  const visiblePrograms = useMemo(
+    () => programs.filter((program) => matchesDuration(program, activeDuration) && matchesBodyFocus(program, activeBodyFocus)),
+    [programs, activeDuration, activeBodyFocus],
+  );
 
   function handleCategoryPress(cat: { label: string; value: string }) {
     setActiveCategory(cat.value);
@@ -55,13 +110,16 @@ export default function ProgramBrowseScreen() {
   function renderProgramCard({ item }: { item: SharedProgram }) {
     const isPaid = (item.price ?? 0) > 0;
     const stars = Math.round(item.ratingAverage ?? 0);
+    const durationMinutes = getProgramDurationMinutes(item);
+    const bodyFocus = getProgramBodyFocus(item);
+    const quickTags = item.tags.filter((tag) => !/^\d+_min$/.test(tag) && !['beginner', 'intermediate', 'advanced'].includes(tag)).slice(0, 3);
+
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() => router.push(`/(app)/programs/${item.id}`)}
         activeOpacity={0.85}
       >
-        {/* Cover image */}
         {item.coverImageUrl ? (
           <Image source={{ uri: item.coverImageUrl }} style={styles.cardCover} resizeMode="cover" />
         ) : (
@@ -71,9 +129,8 @@ export default function ProgramBrowseScreen() {
         )}
 
         <View style={styles.cardBody}>
-          {/* Title + price badge */}
           <View style={styles.cardTopRow}>
-            <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
             <View style={[styles.priceBadge, isPaid && styles.priceBadgePaid]}>
               <Text style={[styles.priceBadgeText, isPaid && styles.priceBadgeTextPaid]}>
                 {isPaid ? `$${item.price.toFixed(2)} · Soon` : 'Free'}
@@ -81,25 +138,39 @@ export default function ProgramBrowseScreen() {
             </View>
           </View>
 
-          {/* Creator row */}
           <View style={styles.creatorRow}>
             {item.creatorAvatar ? (
               <Image source={{ uri: item.creatorAvatar }} style={styles.creatorAvatar} />
             ) : (
               <View style={styles.creatorAvatarPlaceholder}>
-                <Text style={styles.creatorAvatarInitial}>
-                  {(item.creatorName ?? '?')[0].toUpperCase()}
-                </Text>
+                <Text style={styles.creatorAvatarInitial}>{(item.creatorName ?? '?')[0].toUpperCase()}</Text>
               </View>
             )}
             <Text style={styles.creatorName}>{item.creatorName}</Text>
           </View>
 
-          {/* Meta row */}
+          <View style={styles.highlightRow}>
+            {durationMinutes ? (
+              <View style={styles.microBadge}><Text style={styles.microBadgeText}>{durationMinutes} min</Text></View>
+            ) : null}
+            {bodyFocus ? (
+              <View style={styles.microBadge}><Text style={styles.microBadgeText}>{bodyFocus}</Text></View>
+            ) : null}
+            <View style={styles.microBadge}><Text style={styles.microBadgeText}>{item.daysPerWeek} days/week</Text></View>
+          </View>
+
+          {quickTags.length > 0 ? (
+            <View style={styles.tagRow}>
+              {quickTags.map((tag) => (
+                <Text key={`${item.id}-${tag}`} style={styles.tagText}>{formatTag(tag)}</Text>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>{item.durationWeeks}wk · {item.daysPerWeek}d/wk</Text>
+            <Text style={styles.metaText}>{item.durationWeeks}wk · {item.category} · {item.difficulty}</Text>
             <View style={styles.ratingRow}>
-              {[1,2,3,4,5].map((s) => (
+              {[1, 2, 3, 4, 5].map((s) => (
                 <Ionicons
                   key={s}
                   name={s <= stars ? 'star' : 'star-outline'}
@@ -117,18 +188,16 @@ export default function ProgramBrowseScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Browse Programs</Text>
         <TouchableOpacity
           style={styles.shareBtn}
           onPress={() => router.push('/(app)/programs/share')}
         >
-          <Text style={styles.shareBtnText}>Share Mine</Text>
+          <Text style={styles.shareBtnText}>Share My Program</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={16} color={colors.textMuted} style={styles.searchIcon} />
         <TextInput
@@ -142,35 +211,10 @@ export default function ProgramBrowseScreen() {
         />
       </View>
 
-      {/* Category pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow} style={styles.pillScroll}>
-        {CATEGORIES.map((cat, i) => (
-          <TouchableOpacity
-            key={cat.value || 'all'}
-            style={[styles.pill, activeCategory === cat.value && styles.pillActive, i > 0 && styles.pillSpacing]}
-            onPress={() => handleCategoryPress(cat)}
-          >
-            <Text style={[styles.pillText, activeCategory === cat.value && styles.pillTextActive]}>
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Difficulty pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow} style={styles.pillScroll}>
-        {DIFFICULTIES.map((diff, i) => (
-          <TouchableOpacity
-            key={diff.value}
-            style={[styles.pill, activeDifficulty === diff.value && styles.pillActive, i > 0 && styles.pillSpacing]}
-            onPress={() => handleDifficultyPress(diff)}
-          >
-            <Text style={[styles.pillText, activeDifficulty === diff.value && styles.pillTextActive]}>
-              {diff.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <FilterPills items={CATEGORIES} activeValue={activeCategory} onPress={handleCategoryPress} />
+      <FilterPills items={DIFFICULTIES} activeValue={activeDifficulty} onPress={handleDifficultyPress} />
+      <FilterPills items={DURATIONS} activeValue={activeDuration} onPress={(item) => setActiveDuration(item.value)} />
+      <FilterPills items={BODY_FOCUS} activeValue={activeBodyFocus} onPress={(item) => setActiveBodyFocus(item.value)} />
 
       {isLoading && (
         <View style={styles.centered}>
@@ -184,7 +228,7 @@ export default function ProgramBrowseScreen() {
       )}
       {!isLoading && !error && (
         <FlatList
-          data={programs}
+          data={visiblePrograms}
           keyExtractor={(item) => item.id}
           renderItem={renderProgramCard}
           contentContainerStyle={styles.list}
@@ -256,7 +300,6 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   errorText: { fontSize: typography.md, color: colors.danger, textAlign: 'center' },
   list: { padding: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
-  // Card
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
@@ -291,8 +334,20 @@ const styles = StyleSheet.create({
   },
   creatorAvatarInitial: { fontSize: 10, fontWeight: '700', color: '#fff' },
   creatorName: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '500' },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
-  metaText: { fontSize: typography.xs, color: colors.textMuted },
+  highlightRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  microBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceHover ?? colors.accentLight,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  microBadgeText: { fontSize: typography.xs, color: colors.textSecondary, fontWeight: '600' },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  tagText: { fontSize: typography.xs, color: colors.accent },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.xs },
+  metaText: { fontSize: typography.xs, color: colors.textMuted, textTransform: 'capitalize' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   ratingText: { fontSize: typography.xs, color: colors.textMuted, marginLeft: 3 },
   emptyContainer: { alignItems: 'center', paddingTop: spacing.xxl * 2 },

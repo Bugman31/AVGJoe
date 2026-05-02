@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as analysisService from '../services/weekly.analysis.service';
-import { generateWeeklyAnalysis } from '../services/ai.service';
 import { getProgram, advanceProgramWeek } from '../services/program.service';
 import { prisma } from '../utils/prisma';
 
@@ -30,11 +29,10 @@ export async function triggerWeeklyAnalysis(req: Request, res: Response, next: N
       return;
     }
 
-    // Gather sessions for this week's planned workouts
     const plannedThisWeek = (program.plannedWorkouts as Array<{ id: string; weekNumber: number; name: string; exercises: unknown; isCompleted: boolean }>)
       .filter((pw) => pw.weekNumber === weekNumber);
 
-    const completedSessionIds = await prisma.workoutSession.findMany({
+    const completedSessions = await prisma.workoutSession.findMany({
       where: {
         userId,
         programId,
@@ -48,7 +46,6 @@ export async function triggerWeeklyAnalysis(req: Request, res: Response, next: N
         preEnergyLevel: true,
         postEnergyLevel: true,
         sorenessLevel: true,
-        aiSummary: true,
         sets: {
           select: {
             exerciseName: true,
@@ -64,27 +61,37 @@ export async function triggerWeeklyAnalysis(req: Request, res: Response, next: N
       take: 20,
     });
 
-    const analysisResult = await generateWeeklyAnalysis(userId, {
-      program,
-      plannedWorkouts: plannedThisWeek,
-      completedSessions: completedSessionIds,
-      weekNumber,
-    });
+    // Rule-based weekly analysis (no AI required)
+    const completedCount = completedSessions.length;
+    const plannedCount = plannedThisWeek.length || 1;
+    const adherenceScore = Math.min(1, completedCount / plannedCount);
+
+    const rpeValues = completedSessions
+      .flatMap((s) => s.sets)
+      .map((s) => s.rpe)
+      .filter((r): r is number => r != null);
+    const avgRpe = rpeValues.length > 0
+      ? rpeValues.reduce((a, b) => a + b, 0) / rpeValues.length
+      : 6;
+    const fatigueLevel = Math.round(avgRpe);
 
     const saved = await analysisService.saveAnalysis({
       userId,
       programId,
       weekNumber,
-      adherenceScore: analysisResult.adherenceScore,
-      fatigueLevel: analysisResult.fatigueLevel,
-      progressionNotes: analysisResult.progressionNotes,
-      adjustments: analysisResult.adjustments,
-      recommendations: analysisResult.recommendations,
-      weekSummary: analysisResult.weekSummary,
-      rawAiOutput: JSON.stringify(analysisResult),
+      adherenceScore,
+      fatigueLevel,
+      progressionNotes: adherenceScore >= 0.8
+        ? 'Good week — consider increasing load by 2.5–5% next week.'
+        : 'Missed sessions this week. Keep the same load and focus on consistency.',
+      adjustments: [],
+      recommendations: fatigueLevel >= 8
+        ? ['Consider a deload next week to manage fatigue.']
+        : ['Stay on track with the program as written.'],
+      weekSummary: `Week ${weekNumber}: ${completedCount} of ${plannedThisWeek.length} sessions completed.`,
+      rawAiOutput: undefined,
     });
 
-    // Advance to next week if not already there
     if ((program as { currentWeek: number }).currentWeek === weekNumber) {
       await advanceProgramWeek(programId);
     }

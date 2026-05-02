@@ -7,7 +7,6 @@ import compression from 'compression';
 import authRoutes from './routes/auth.routes';
 import workoutRoutes from './routes/workout.routes';
 import sessionRoutes from './routes/session.routes';
-import aiRoutes from './routes/ai.routes';
 import profileRoutes from './routes/profile.routes';
 import exerciseRoutes from './routes/exercise.routes';
 import programRoutes from './routes/program.routes';
@@ -39,7 +38,6 @@ app.use(
   })
 );
 
-// Body parsing — allow larger AI-generated program payloads while keeping a bounded limit
 app.use(express.json({ limit: requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
 
@@ -52,7 +50,6 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/sessions', sessionRoutes);
-app.use('/api/ai', aiRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/programs', programRoutes);

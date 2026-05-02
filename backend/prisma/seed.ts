@@ -14,6 +14,25 @@ function sets(count: number, reps: number, unit = 'lbs') {
   }));
 }
 
+type SeedExercise = Record<string, unknown>;
+
+type SeedSession = {
+  name: string;
+  focus: string;
+  exercises: SeedExercise[];
+  estimatedDuration?: number;
+  coachNotes?: string;
+  warmup?: string[];
+  conditioning?: Record<string, unknown>;
+};
+
+function buildAuthoredWeeklyPlan(weeks: Array<Record<string, SeedSession>>) {
+  return weeks.reduce<Record<string, Record<string, SeedSession>>>((plan, week, index) => {
+    plan[`week${index + 1}`] = week;
+    return plan;
+  }, {});
+}
+
 function buildWeeklyPlan(
   weeks: number,
   dayMap: Record<string, { name: string; focus: string; exercises: Array<Record<string, unknown>> }>,
@@ -50,6 +69,27 @@ function parseRepString(reps: string | number | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+function normalizeSets(exercise: Record<string, unknown>) {
+  if (Array.isArray(exercise.sets)) {
+    return exercise.sets.map((set, index) => {
+      const rawSet = set as Record<string, unknown>;
+      return {
+        setNumber: typeof rawSet.setNumber === 'number' ? rawSet.setNumber : index + 1,
+        targetReps: parseRepString(rawSet.targetReps as string | number | undefined),
+        targetWeight: typeof rawSet.targetWeight === 'number' ? rawSet.targetWeight : null,
+        unit: (rawSet.unit as string) ?? 'kg',
+      };
+    });
+  }
+
+  return Array.from({ length: Number(exercise.sets) || 3 }, (_, i) => ({
+    setNumber: i + 1,
+    targetReps: parseRepString(exercise.reps as string | number | undefined),
+    targetWeight: typeof exercise.weight === 'number' ? exercise.weight : null,
+    unit: (exercise.unit as string) ?? 'kg',
+  }));
+}
+
 function expandWorkoutPlanToPlannedWorkouts(
   workoutPlan: unknown,
   programId: string,
@@ -71,12 +111,7 @@ function expandWorkoutPlanToPlannedWorkouts(
           name: (exercise.name as string) ?? 'Exercise',
           orderIndex: idx,
           notes: (exercise.notes as string | undefined) ?? null,
-          sets: Array.from({ length: Number(exercise.sets) || 3 }, (_, i) => ({
-            setNumber: i + 1,
-            targetReps: parseRepString(exercise.reps as string | number | undefined),
-            targetWeight: typeof exercise.weight === 'number' ? exercise.weight : null,
-            unit: (exercise.unit as string) ?? 'kg',
-          })),
+          sets: normalizeSets(exercise),
         };
       });
 
@@ -87,11 +122,11 @@ function expandWorkoutPlanToPlannedWorkouts(
         dayOfWeek: dayName,
         name: (s.name as string) ?? dayName,
         focus: (s.focus as string | undefined) ?? null,
-        warmup: JSON.stringify([]),
+        warmup: JSON.stringify(Array.isArray(s.warmup) ? s.warmup : []),
         exercises: JSON.stringify(plannedExercises),
-        conditioning: null,
-        coachNotes: null,
-        estimatedDuration: null,
+        conditioning: s.conditioning ? JSON.stringify(s.conditioning) : null,
+        coachNotes: typeof s.coachNotes === 'string' ? s.coachNotes : null,
+        estimatedDuration: typeof s.estimatedDuration === 'number' ? s.estimatedDuration : null,
         isCompleted: false,
       });
     }
@@ -854,6 +889,799 @@ async function main() {
           ],
         },
       }, 2.5),
+    },
+    {
+      coachEmail: 'coach.sarah@avgjoe.com',
+      name: 'Quick Strength Express',
+      description:
+        'A 20-minute full-body strength plan built for busy weeks. ' +
+        'Three sessions per week, minimal setup, and clear weekly progressions that keep the volume appropriate for short sessions.',
+      category: 'strength',
+      difficulty: 'beginner',
+      durationWeeks: 4,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1517964603305-11c0f6f66012?w=800&q=80',
+      ratingAverage: 4.5,
+      enrollmentCount: 166,
+      equipment: ['dumbbells', 'bench', 'bodyweight'],
+      tags: ['strength', 'beginner', '20_min', 'full_body', 'dumbbells', 'express'],
+      workoutPlan: buildAuthoredWeeklyPlan([
+        {
+          Monday: {
+            name: 'Express A',
+            focus: 'Squat / Push / Row',
+            estimatedDuration: 20,
+            warmup: ['2 minutes brisk walk or bike', '8 bodyweight squats', '8 wall push-ups', '20 second plank'],
+            coachNotes: 'Week 1 is about crisp reps and clean transitions. Rest about 45 seconds between movements.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 3, reps: '8', weight: 25, unit: 'lbs', notes: 'Move with control and own the bottom position.' },
+              { name: 'Dumbbell Bench Press', sets: 3, reps: '8', weight: 20, unit: 'lbs', notes: 'Pause lightly at the bottom.' },
+              { name: 'One-Arm Dumbbell Row', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: '10 reps per arm.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Express B',
+            focus: 'Hinge / Press / Lunge',
+            estimatedDuration: 20,
+            warmup: ['8 hip hinges', '6 reverse lunges per side', '8 band pull-aparts'],
+            coachNotes: 'Keep the session moving. You should finish feeling worked, not flattened.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 3, reps: '8', weight: 35, unit: 'lbs', notes: 'Keep the dumbbells close to your legs.' },
+              { name: 'Half-Kneeling Dumbbell Press', sets: 3, reps: '8', weight: 15, unit: 'lbs', notes: '8 reps per arm.' },
+              { name: 'Reverse Lunge', sets: 3, reps: '8', weight: 15, unit: 'lbs', notes: '8 reps per leg.' },
+            ],
+          },
+          Friday: {
+            name: 'Express C',
+            focus: 'Glutes / Pull / Core',
+            estimatedDuration: 20,
+            warmup: ['10 glute bridges', '8 dead bugs per side', '20 second side plank per side'],
+            coachNotes: 'Finish the week with quality posture and bracing work. Move smoothly between stations.',
+            exercises: [
+              { name: 'Glute Bridge', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: 'Pause for one second at the top.' },
+              { name: 'Lat Pulldown', sets: 3, reps: '10', weight: 45, unit: 'lbs', notes: 'Drive elbows down and back.' },
+              { name: 'Dead Bug', sets: 3, reps: '8', unit: 'reps', notes: '8 reps per side.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Express A',
+            focus: 'Squat / Push / Row',
+            estimatedDuration: 20,
+            warmup: ['2 minutes brisk walk or bike', '8 bodyweight squats', '8 wall push-ups', '20 second plank'],
+            coachNotes: 'Add one set to the main movements this week and keep the rest short.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '8', weight: 30, unit: 'lbs', notes: 'Keep your ribs stacked over your hips.' },
+              { name: 'Dumbbell Bench Press', sets: 4, reps: '8', weight: 22.5, unit: 'lbs', notes: 'Press smoothly and keep shoulders packed.' },
+              { name: 'One-Arm Dumbbell Row', sets: 3, reps: '10', weight: 30, unit: 'lbs', notes: '10 reps per arm.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Express B',
+            focus: 'Hinge / Press / Lunge',
+            estimatedDuration: 20,
+            warmup: ['8 hip hinges', '6 reverse lunges per side', '8 band pull-aparts'],
+            coachNotes: 'Same session length, slightly more work. Keep the lunges steady and balanced.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 40, unit: 'lbs', notes: 'Brace before every rep.' },
+              { name: 'Half-Kneeling Dumbbell Press', sets: 3, reps: '10', weight: 15, unit: 'lbs', notes: '10 reps per arm.' },
+              { name: 'Reverse Lunge', sets: 3, reps: '8', weight: 20, unit: 'lbs', notes: '8 reps per leg.' },
+            ],
+          },
+          Friday: {
+            name: 'Express C',
+            focus: 'Glutes / Pull / Core',
+            estimatedDuration: 20,
+            warmup: ['10 glute bridges', '8 dead bugs per side', '20 second side plank per side'],
+            coachNotes: 'We keep this session dense by nudging the pulling volume and core difficulty.',
+            exercises: [
+              { name: 'Glute Bridge', sets: 4, reps: '10', weight: 30, unit: 'lbs', notes: 'Drive through your heels.' },
+              { name: 'Lat Pulldown', sets: 4, reps: '10', weight: 50, unit: 'lbs', notes: 'Own the stretch at the top.' },
+              { name: 'Dead Bug', sets: 3, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Express A',
+            focus: 'Squat / Push / Row',
+            estimatedDuration: 20,
+            warmup: ['2 minutes brisk walk or bike', '8 bodyweight squats', '8 wall push-ups', '20 second plank'],
+            coachNotes: 'Week 3 shifts the main work to 6 reps so the loads can climb while staying fast.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '6', weight: 35, unit: 'lbs', notes: 'Stay tall and accelerate up.' },
+              { name: 'Dumbbell Bench Press', sets: 4, reps: '6', weight: 25, unit: 'lbs', notes: 'Treat every rep like a first rep.' },
+              { name: 'One-Arm Dumbbell Row', sets: 3, reps: '8', weight: 30, unit: 'lbs', notes: '8 reps per arm.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Express B',
+            focus: 'Hinge / Press / Lunge',
+            estimatedDuration: 20,
+            warmup: ['8 hip hinges', '6 reverse lunges per side', '8 band pull-aparts'],
+            coachNotes: 'Heavier hinge work this week. Use a little more rest before the RDL sets if needed.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 4, reps: '6', weight: 45, unit: 'lbs', notes: 'Keep hamstrings loaded and spine neutral.' },
+              { name: 'Half-Kneeling Dumbbell Press', sets: 4, reps: '8', weight: 17.5, unit: 'lbs', notes: '8 reps per arm.' },
+              { name: 'Reverse Lunge', sets: 3, reps: '8', weight: 20, unit: 'lbs', notes: 'Push evenly through the front foot.' },
+            ],
+          },
+          Friday: {
+            name: 'Express C',
+            focus: 'Glutes / Pull / Core',
+            estimatedDuration: 20,
+            warmup: ['10 glute bridges', '8 dead bugs per side', '20 second side plank per side'],
+            coachNotes: 'The goal is strong, clean pulling with no rushing on the core work.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 4, reps: '8', weight: 45, unit: 'lbs', notes: 'Pause hard at the top.' },
+              { name: 'Lat Pulldown', sets: 4, reps: '8', weight: 55, unit: 'lbs', notes: 'Drive elbows toward your pockets.' },
+              { name: 'Side Plank', sets: 3, reps: '30', unit: 'sec', notes: '30-second hold per side.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Express A',
+            focus: 'Squat / Push / Row',
+            estimatedDuration: 20,
+            warmup: ['2 minutes brisk walk or bike', '8 bodyweight squats', '8 wall push-ups', '20 second plank'],
+            coachNotes: 'This is your consolidation week. Keep the loads honest and leave one strong rep in reserve.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 3, reps: '8', weight: 35, unit: 'lbs', notes: 'Smooth tempo and full depth.' },
+              { name: 'Dumbbell Bench Press', sets: 3, reps: '8', weight: 25, unit: 'lbs', notes: 'Stay stable on the bench.' },
+              { name: 'One-Arm Dumbbell Row', sets: 3, reps: '10', weight: 30, unit: 'lbs', notes: '10 reps per arm.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Express B',
+            focus: 'Hinge / Press / Lunge',
+            estimatedDuration: 20,
+            warmup: ['8 hip hinges', '6 reverse lunges per side', '8 band pull-aparts'],
+            coachNotes: 'One final controlled progression before you can recycle the plan with slightly heavier weights.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 3, reps: '8', weight: 45, unit: 'lbs', notes: 'Keep tension the whole time.' },
+              { name: 'Half-Kneeling Dumbbell Press', sets: 3, reps: '10', weight: 17.5, unit: 'lbs', notes: '10 reps per arm.' },
+              { name: 'Reverse Lunge', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+            ],
+          },
+          Friday: {
+            name: 'Express C',
+            focus: 'Glutes / Pull / Core',
+            estimatedDuration: 20,
+            warmup: ['10 glute bridges', '8 dead bugs per side', '20 second side plank per side'],
+            coachNotes: 'End with a strong posture-focused session. Keep rest short and technique sharp.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 3, reps: '10', weight: 45, unit: 'lbs', notes: 'Pause for one second at the top.' },
+              { name: 'Lat Pulldown', sets: 3, reps: '10', weight: 55, unit: 'lbs', notes: 'Full stretch every rep.' },
+              { name: 'Side Plank', sets: 3, reps: '35', unit: 'sec', notes: '35-second hold per side.' },
+            ],
+          },
+        },
+      ]),
+    },
+    {
+      coachEmail: 'coach.marcus@avgjoe.com',
+      name: 'Lower Body Sculpt',
+      description:
+        'A 6-week lower-body hypertrophy block centered on glutes, quads, and hamstrings. ' +
+        'Every week is fully authored with changes in volume, rep targets, and movement emphasis.',
+      category: 'hypertrophy',
+      difficulty: 'intermediate',
+      durationWeeks: 6,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&q=80',
+      ratingAverage: 4.7,
+      enrollmentCount: 143,
+      equipment: ['dumbbells', 'bench', 'leg press', 'cable machine'],
+      tags: ['hypertrophy', '30_min', 'lower_body', 'glutes_legs', 'dumbbells'],
+      workoutPlan: buildAuthoredWeeklyPlan([
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'Week 1 sets the groove. Use full range and keep every rep smooth.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 4, reps: '10', weight: 95, unit: 'lbs', notes: 'Pause at the top for one second.' },
+              { name: 'Romanian Deadlift', sets: 3, reps: '10', weight: 65, unit: 'lbs', notes: 'Stretch the hamstrings without losing posture.' },
+              { name: 'Cable Kickback', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 2, reps: '12', weight: 45, unit: 'lbs', notes: 'Stay strict and do not bounce.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'Keep the pace brisk. The short session works because the exercise count stays tight.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '10', weight: 40, unit: 'lbs', notes: 'Sit between your hips.' },
+              { name: 'Leg Press', sets: 3, reps: '12', weight: 160, unit: 'lbs', notes: 'Do not lock out hard at the top.' },
+              { name: 'Step-Up', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Pallof Press', sets: 2, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'Own the single-leg positions and keep the torso quiet.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 3, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Walking Lunge', sets: 3, reps: '12', weight: 15, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 3, reps: '12', weight: 35, unit: 'lbs', notes: 'Push knees out and stay tall.' },
+              { name: 'Standing Calf Raise', sets: 2, reps: '15', weight: 35, unit: 'lbs', notes: 'Pause at the top.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'Add one set to the first two lifts and chase a deeper glute contraction.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 5, reps: '10', weight: 105, unit: 'lbs', notes: 'Pause hard at the top.' },
+              { name: 'Romanian Deadlift', sets: 4, reps: '10', weight: 70, unit: 'lbs', notes: 'Keep shoulders packed.' },
+              { name: 'Cable Kickback', sets: 3, reps: '14', weight: 20, unit: 'lbs', notes: '14 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 2, reps: '15', weight: 45, unit: 'lbs', notes: 'Smooth eccentric.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'More total reps this week, but keep the rest windows honest.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '12', weight: 40, unit: 'lbs', notes: 'Stay balanced through the whole foot.' },
+              { name: 'Leg Press', sets: 4, reps: '12', weight: 180, unit: 'lbs', notes: 'Control the bottom position.' },
+              { name: 'Step-Up', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Pallof Press', sets: 2, reps: '14', weight: 20, unit: 'lbs', notes: '14 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'Same number of exercises, slightly more tension through longer sets.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 4, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Walking Lunge', sets: 3, reps: '14', weight: 15, unit: 'lbs', notes: '14 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 3, reps: '14', weight: 40, unit: 'lbs', notes: 'Drive knees out.' },
+              { name: 'Standing Calf Raise', sets: 3, reps: '15', weight: 35, unit: 'lbs', notes: 'Pause and control down.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'Week 3 nudges the loads up and tightens the rep range on the main lifts.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 4, reps: '8', weight: 115, unit: 'lbs', notes: 'Drive through the heels and pause.' },
+              { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 75, unit: 'lbs', notes: 'Keep your lats locked in.' },
+              { name: 'Cable Kickback', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 3, reps: '12', weight: 50, unit: 'lbs', notes: 'No bouncing at the bottom.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'Heavier week. Keep the leg press controlled and save the knees by not rushing.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '10', weight: 45, unit: 'lbs', notes: 'Use a strong brace before each set.' },
+              { name: 'Leg Press', sets: 4, reps: '10', weight: 200, unit: 'lbs', notes: 'Smooth lockout.' },
+              { name: 'Step-Up', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Pallof Press', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'Single-leg work gets slightly heavier, not longer. Keep balance over speed.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 4, reps: '8', weight: 25, unit: 'lbs', notes: '8 reps per leg.' },
+              { name: 'Walking Lunge', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 3, reps: '12', weight: 45, unit: 'lbs', notes: 'Stay tall through the torso.' },
+              { name: 'Standing Calf Raise', sets: 3, reps: '15', weight: 40, unit: 'lbs', notes: 'Full stretch at the bottom.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'This week leans into volume again after the heavier third week.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 4, reps: '12', weight: 105, unit: 'lbs', notes: 'Chase a full squeeze every rep.' },
+              { name: 'Romanian Deadlift', sets: 4, reps: '10', weight: 75, unit: 'lbs', notes: 'Stretch with control.' },
+              { name: 'Cable Kickback', sets: 3, reps: '15', weight: 25, unit: 'lbs', notes: '15 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 2, reps: '15', weight: 50, unit: 'lbs', notes: 'Smooth tempo.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'Volume bump without adding more movements. That keeps the session inside the 30-minute lane.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '12', weight: 45, unit: 'lbs', notes: 'Stay upright through the final reps.' },
+              { name: 'Leg Press', sets: 4, reps: '12', weight: 200, unit: 'lbs', notes: 'Control the descent.' },
+              { name: 'Step-Up', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Pallof Press', sets: 2, reps: '15', weight: 25, unit: 'lbs', notes: '15 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'Longer sets here should burn, but the form should stay stable.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Walking Lunge', sets: 3, reps: '14', weight: 20, unit: 'lbs', notes: '14 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 3, reps: '15', weight: 40, unit: 'lbs', notes: 'Keep constant tension.' },
+              { name: 'Standing Calf Raise', sets: 3, reps: '18', weight: 40, unit: 'lbs', notes: 'Strong pause at the top.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'Peak week. Push the first two lifts, then keep the accessories clean.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 5, reps: '8', weight: 125, unit: 'lbs', notes: 'Pause on every rep.' },
+              { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 80, unit: 'lbs', notes: 'Brace and keep the bar path tight.' },
+              { name: 'Cable Kickback', sets: 3, reps: '12', weight: 30, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 3, reps: '10', weight: 55, unit: 'lbs', notes: 'Control the last two reps.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'Heavier and shorter on the main lifts to finish the block strong.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 4, reps: '8', weight: 50, unit: 'lbs', notes: 'Stay stacked and drive through the floor.' },
+              { name: 'Leg Press', sets: 4, reps: '10', weight: 220, unit: 'lbs', notes: 'No bouncing in the bottom.' },
+              { name: 'Step-Up', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Pallof Press', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'This is the toughest unilateral week. Stay patient and balanced.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 4, reps: '8', weight: 30, unit: 'lbs', notes: '8 reps per leg.' },
+              { name: 'Walking Lunge', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 3, reps: '12', weight: 50, unit: 'lbs', notes: 'Full depth and steady tempo.' },
+              { name: 'Standing Calf Raise', sets: 3, reps: '15', weight: 45, unit: 'lbs', notes: 'Pause at the top.' },
+            ],
+          },
+        },
+        {
+          Monday: {
+            name: 'Glute Drive',
+            focus: 'Glutes / Hamstrings',
+            estimatedDuration: 30,
+            warmup: ['5 minutes incline walk', '8 bodyweight good mornings', '10 glute bridges'],
+            coachNotes: 'Deload and consolidate. Reduce the volume slightly and leave fresh, quality reps on the table.',
+            exercises: [
+              { name: 'Hip Thrust', sets: 3, reps: '10', weight: 105, unit: 'lbs', notes: 'Smooth reps and full lockout.' },
+              { name: 'Romanian Deadlift', sets: 3, reps: '10', weight: 70, unit: 'lbs', notes: 'Easy tempo, no grinding.' },
+              { name: 'Cable Kickback', sets: 2, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Hamstring Curl', sets: 2, reps: '12', weight: 45, unit: 'lbs', notes: 'Keep this one crisp.' },
+            ],
+          },
+          Wednesday: {
+            name: 'Quad Builder',
+            focus: 'Quads / Core',
+            estimatedDuration: 30,
+            warmup: ['8 bodyweight squats', '6 reverse lunges per side', '20 second wall sit'],
+            coachNotes: 'Use this week to recover while practicing strong squat mechanics.',
+            exercises: [
+              { name: 'Goblet Squat', sets: 3, reps: '10', weight: 40, unit: 'lbs', notes: 'Controlled descent and smooth ascent.' },
+              { name: 'Leg Press', sets: 3, reps: '12', weight: 180, unit: 'lbs', notes: 'Keep tension in the quads.' },
+              { name: 'Step-Up', sets: 2, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Pallof Press', sets: 2, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per side.' },
+            ],
+          },
+          Friday: {
+            name: 'Unilateral Burn',
+            focus: 'Glutes / Quads',
+            estimatedDuration: 30,
+            warmup: ['10 glute bridges', '8 split squat pulses per side', '20 second dead hang if available'],
+            coachNotes: 'Finish the block feeling better than you started this week.',
+            exercises: [
+              { name: 'Bulgarian Split Squat', sets: 2, reps: '10', weight: 20, unit: 'lbs', notes: '10 reps per leg.' },
+              { name: 'Walking Lunge', sets: 2, reps: '12', weight: 15, unit: 'lbs', notes: '12 reps per leg.' },
+              { name: 'Dumbbell Sumo Squat', sets: 2, reps: '12', weight: 35, unit: 'lbs', notes: 'Smooth tempo and good range.' },
+              { name: 'Standing Calf Raise', sets: 2, reps: '15', weight: 35, unit: 'lbs', notes: 'Pause at the top.' },
+            ],
+          },
+        },
+      ]),
+    },
+    {
+      coachEmail: 'coach.derek@avgjoe.com',
+      name: 'Back + Core Builder',
+      description:
+        'A posture-first strength plan for lifters who want more upper-back work, trunk stability, and better movement quality. ' +
+        'Short 30-minute sessions with complete weekly progression.',
+      category: 'general',
+      difficulty: 'beginner',
+      durationWeeks: 4,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
+      ratingAverage: 4.6,
+      enrollmentCount: 129,
+      equipment: ['dumbbells', 'cable machine', 'bodyweight'],
+      tags: ['general', '30_min', 'back_core', 'posture', 'dumbbells'],
+      workoutPlan: buildAuthoredWeeklyPlan([
+        {
+          Tuesday: {
+            name: 'Posture Pull',
+            focus: 'Upper Back / Bracing',
+            estimatedDuration: 30,
+            warmup: ['6 cat-cows', '8 band pull-aparts', '20 second dead hang if available'],
+            coachNotes: 'Keep ribs down and let the upper back do the work.',
+            exercises: [
+              { name: 'Chest-Supported Row', sets: 4, reps: '10', weight: 25, unit: 'lbs', notes: 'Drive elbows toward your hips.' },
+              { name: 'Lat Pulldown', sets: 3, reps: '10', weight: 55, unit: 'lbs', notes: 'Full stretch every rep.' },
+              { name: 'Dead Bug', sets: 3, reps: '8', unit: 'reps', notes: '8 reps per side.' },
+              { name: 'Farmer Carry', sets: 3, reps: '30', weight: 25, unit: 'sec', notes: '30-second walk with tall posture.' },
+            ],
+          },
+          Thursday: {
+            name: 'Hinge + Anti-Rotate',
+            focus: 'Posterior Chain / Core',
+            estimatedDuration: 30,
+            warmup: ['8 hip hinges', '6 glute bridges', '20 second plank'],
+            coachNotes: 'This day is about trunk stiffness and clean hinge mechanics.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 55, unit: 'lbs', notes: 'Stay long through the spine.' },
+              { name: 'Single-Arm Cable Row', sets: 3, reps: '10', weight: 25, unit: 'lbs', notes: '10 reps per arm.' },
+              { name: 'Pallof Press', sets: 3, reps: '12', weight: 15, unit: 'lbs', notes: '12 reps per side.' },
+              { name: 'Bird Dog', sets: 2, reps: '8', unit: 'reps', notes: '8 reps per side with a full pause.' },
+            ],
+          },
+          Saturday: {
+            name: 'Back Endurance',
+            focus: 'Scap Control / Core',
+            estimatedDuration: 30,
+            warmup: ['8 wall slides', '8 glute bridges', '20 second side plank per side'],
+            coachNotes: 'Lighter loads, longer time under tension, and smooth breathing.',
+            exercises: [
+              { name: 'Seated Cable Row', sets: 3, reps: '12', weight: 50, unit: 'lbs', notes: 'Pause at your torso.' },
+              { name: 'Face Pull', sets: 3, reps: '15', weight: 20, unit: 'lbs', notes: 'Pull to eye level.' },
+              { name: 'Side Plank', sets: 3, reps: '25', unit: 'sec', notes: '25-second hold per side.' },
+              { name: 'Glute Bridge March', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Posture Pull',
+            focus: 'Upper Back / Bracing',
+            estimatedDuration: 30,
+            warmup: ['6 cat-cows', '8 band pull-aparts', '20 second dead hang if available'],
+            coachNotes: 'Add a little volume without changing the movement list.',
+            exercises: [
+              { name: 'Chest-Supported Row', sets: 4, reps: '12', weight: 25, unit: 'lbs', notes: 'Stay glued to the bench.' },
+              { name: 'Lat Pulldown', sets: 4, reps: '10', weight: 60, unit: 'lbs', notes: 'Drive elbows to your pockets.' },
+              { name: 'Dead Bug', sets: 3, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+              { name: 'Farmer Carry', sets: 3, reps: '35', weight: 25, unit: 'sec', notes: '35-second walk with crisp posture.' },
+            ],
+          },
+          Thursday: {
+            name: 'Hinge + Anti-Rotate',
+            focus: 'Posterior Chain / Core',
+            estimatedDuration: 30,
+            warmup: ['8 hip hinges', '6 glute bridges', '20 second plank'],
+            coachNotes: 'Move the hinge slightly heavier and keep the anti-rotation strict.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 4, reps: '10', weight: 55, unit: 'lbs', notes: 'Stretch the hamstrings without losing position.' },
+              { name: 'Single-Arm Cable Row', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: '12 reps per arm.' },
+              { name: 'Pallof Press', sets: 3, reps: '14', weight: 15, unit: 'lbs', notes: '14 reps per side.' },
+              { name: 'Bird Dog', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per side with a pause.' },
+            ],
+          },
+          Saturday: {
+            name: 'Back Endurance',
+            focus: 'Scap Control / Core',
+            estimatedDuration: 30,
+            warmup: ['8 wall slides', '8 glute bridges', '20 second side plank per side'],
+            coachNotes: 'Longer sets should challenge your posture, not your joints.',
+            exercises: [
+              { name: 'Seated Cable Row', sets: 4, reps: '12', weight: 55, unit: 'lbs', notes: 'Pause at the torso.' },
+              { name: 'Face Pull', sets: 3, reps: '15', weight: 25, unit: 'lbs', notes: 'Smooth finish at eye level.' },
+              { name: 'Side Plank', sets: 3, reps: '30', unit: 'sec', notes: '30-second hold per side.' },
+              { name: 'Glute Bridge March', sets: 3, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Posture Pull',
+            focus: 'Upper Back / Bracing',
+            estimatedDuration: 30,
+            warmup: ['6 cat-cows', '8 band pull-aparts', '20 second dead hang if available'],
+            coachNotes: 'Heavier week. Keep your neck relaxed and let the mid-back lead.',
+            exercises: [
+              { name: 'Chest-Supported Row', sets: 4, reps: '8', weight: 30, unit: 'lbs', notes: 'Drive the elbows, not the hands.' },
+              { name: 'Lat Pulldown', sets: 4, reps: '8', weight: 65, unit: 'lbs', notes: 'Own the bottom position.' },
+              { name: 'Dead Bug', sets: 3, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+              { name: 'Farmer Carry', sets: 4, reps: '30', weight: 30, unit: 'sec', notes: '30-second walk with stacked posture.' },
+            ],
+          },
+          Thursday: {
+            name: 'Hinge + Anti-Rotate',
+            focus: 'Posterior Chain / Core',
+            estimatedDuration: 30,
+            warmup: ['8 hip hinges', '6 glute bridges', '20 second plank'],
+            coachNotes: 'This is the hardest trunk-bracing week. Stay patient between sets.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 4, reps: '8', weight: 65, unit: 'lbs', notes: 'Stay locked in through the midline.' },
+              { name: 'Single-Arm Cable Row', sets: 4, reps: '10', weight: 30, unit: 'lbs', notes: '10 reps per arm.' },
+              { name: 'Pallof Press', sets: 3, reps: '12', weight: 20, unit: 'lbs', notes: '12 reps per side.' },
+              { name: 'Bird Dog', sets: 3, reps: '8', unit: 'reps', notes: '8 reps per side with a full pause.' },
+            ],
+          },
+          Saturday: {
+            name: 'Back Endurance',
+            focus: 'Scap Control / Core',
+            estimatedDuration: 30,
+            warmup: ['8 wall slides', '8 glute bridges', '20 second side plank per side'],
+            coachNotes: 'Slightly heavier pulling, same controlled finish.',
+            exercises: [
+              { name: 'Seated Cable Row', sets: 4, reps: '10', weight: 60, unit: 'lbs', notes: 'Keep the chest tall.' },
+              { name: 'Face Pull', sets: 3, reps: '12', weight: 25, unit: 'lbs', notes: 'Smooth and controlled.' },
+              { name: 'Side Plank', sets: 3, reps: '35', unit: 'sec', notes: '35-second hold per side.' },
+              { name: 'Glute Bridge March', sets: 3, reps: '12', unit: 'reps', notes: '12 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Posture Pull',
+            focus: 'Upper Back / Bracing',
+            estimatedDuration: 30,
+            warmup: ['6 cat-cows', '8 band pull-aparts', '20 second dead hang if available'],
+            coachNotes: 'Consolidate the block with clean sets and strong positions.',
+            exercises: [
+              { name: 'Chest-Supported Row', sets: 3, reps: '10', weight: 30, unit: 'lbs', notes: 'Stay stable against the pad.' },
+              { name: 'Lat Pulldown', sets: 3, reps: '10', weight: 65, unit: 'lbs', notes: 'Full stretch every rep.' },
+              { name: 'Dead Bug', sets: 3, reps: '12', unit: 'reps', notes: '12 reps per side.' },
+              { name: 'Farmer Carry', sets: 3, reps: '40', weight: 30, unit: 'sec', notes: '40-second walk with control.' },
+            ],
+          },
+          Thursday: {
+            name: 'Hinge + Anti-Rotate',
+            focus: 'Posterior Chain / Core',
+            estimatedDuration: 30,
+            warmup: ['8 hip hinges', '6 glute bridges', '20 second plank'],
+            coachNotes: 'Keep the hinge smooth and finish with crisp anti-rotation work.',
+            exercises: [
+              { name: 'Romanian Deadlift', sets: 3, reps: '10', weight: 60, unit: 'lbs', notes: 'Own the tempo down.' },
+              { name: 'Single-Arm Cable Row', sets: 3, reps: '12', weight: 30, unit: 'lbs', notes: '12 reps per arm.' },
+              { name: 'Pallof Press', sets: 3, reps: '14', weight: 20, unit: 'lbs', notes: '14 reps per side.' },
+              { name: 'Bird Dog', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+          Saturday: {
+            name: 'Back Endurance',
+            focus: 'Scap Control / Core',
+            estimatedDuration: 30,
+            warmup: ['8 wall slides', '8 glute bridges', '20 second side plank per side'],
+            coachNotes: 'Finish feeling taller and more stable than when you started.',
+            exercises: [
+              { name: 'Seated Cable Row', sets: 3, reps: '12', weight: 60, unit: 'lbs', notes: 'Strong squeeze at the torso.' },
+              { name: 'Face Pull', sets: 3, reps: '15', weight: 25, unit: 'lbs', notes: 'Lead with elbows and rotate smoothly.' },
+              { name: 'Side Plank', sets: 3, reps: '40', unit: 'sec', notes: '40-second hold per side.' },
+              { name: 'Glute Bridge March', sets: 2, reps: '12', unit: 'reps', notes: '12 reps per side.' },
+            ],
+          },
+        },
+      ]),
+    },
+    {
+      coachEmail: 'coach.marcus@avgjoe.com',
+      name: 'Conditioning Foundations',
+      description:
+        'A beginner-friendly conditioning block with full-body interval work, easy-to-follow progressions, and session lengths that stay in the 20-minute lane.',
+      category: 'endurance',
+      difficulty: 'beginner',
+      durationWeeks: 4,
+      daysPerWeek: 3,
+      coverImageUrl: 'https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=800&q=80',
+      ratingAverage: 4.4,
+      enrollmentCount: 204,
+      equipment: ['bodyweight', 'dumbbells', 'bike or treadmill'],
+      tags: ['endurance', 'conditioning', '20_min', 'full_body', 'bodyweight'],
+      workoutPlan: buildAuthoredWeeklyPlan([
+        {
+          Tuesday: {
+            name: 'Intervals',
+            focus: 'Conditioning / Full Body',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 bodyweight squats', '8 elevated push-ups', '20 high knees'],
+            coachNotes: 'Start conservative. You should finish each round able to repeat the same pace again.',
+            conditioning: { format: '6 rounds', work: '30 sec', rest: '45 sec' },
+            exercises: [
+              { name: 'Bike Sprint', sets: 6, reps: '30', unit: 'sec', notes: '30 seconds hard effort.' },
+              { name: 'Bodyweight Squat', sets: 3, reps: '12', unit: 'reps', notes: 'Stay smooth and relaxed.' },
+              { name: 'Incline Push-Up', sets: 3, reps: '10', unit: 'reps', notes: 'Use a box or bench if needed.' },
+            ],
+          },
+          Thursday: {
+            name: 'Tempo Cardio',
+            focus: 'Aerobic Base / Core',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '6 walking lunges per side', '20 second plank'],
+            coachNotes: 'Keep the pace steady enough that you could speak in short phrases.',
+            conditioning: { format: '10 minute steady effort', target: 'RPE 6' },
+            exercises: [
+              { name: 'Jog or Fast Walk', sets: 1, reps: '10', unit: 'min', notes: 'Sustain a conversational pace.' },
+              { name: 'Walking Lunge', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per leg.' },
+              { name: 'Plank', sets: 3, reps: '25', unit: 'sec', notes: '25-second hold.' },
+            ],
+          },
+          Saturday: {
+            name: 'Long Effort',
+            focus: 'Endurance / Recovery',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 hip hinges', '8 arm circles each direction'],
+            coachNotes: 'This is the easiest-feeling day. The goal is time on task and good rhythm.',
+            conditioning: { format: '15 minute continuous effort', target: 'RPE 5' },
+            exercises: [
+              { name: 'Bike, Rower, or Brisk Walk', sets: 1, reps: '15', unit: 'min', notes: 'Stay controlled and nasal-breathing if possible.' },
+              { name: 'Dead Bug', sets: 2, reps: '8', unit: 'reps', notes: '8 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Intervals',
+            focus: 'Conditioning / Full Body',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 bodyweight squats', '8 elevated push-ups', '20 high knees'],
+            coachNotes: 'Add one round before you add speed. Keep the quality even from start to finish.',
+            conditioning: { format: '7 rounds', work: '30 sec', rest: '45 sec' },
+            exercises: [
+              { name: 'Bike Sprint', sets: 7, reps: '30', unit: 'sec', notes: '30 seconds hard effort.' },
+              { name: 'Bodyweight Squat', sets: 3, reps: '14', unit: 'reps', notes: 'Move continuously.' },
+              { name: 'Incline Push-Up', sets: 3, reps: '10', unit: 'reps', notes: 'Keep a straight line through the body.' },
+            ],
+          },
+          Thursday: {
+            name: 'Tempo Cardio',
+            focus: 'Aerobic Base / Core',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '6 walking lunges per side', '20 second plank'],
+            coachNotes: 'Tempo day stretches out a little longer this week.',
+            conditioning: { format: '12 minute steady effort', target: 'RPE 6' },
+            exercises: [
+              { name: 'Jog or Fast Walk', sets: 1, reps: '12', unit: 'min', notes: 'Stay below your redline.' },
+              { name: 'Walking Lunge', sets: 2, reps: '12', unit: 'reps', notes: '12 reps per leg.' },
+              { name: 'Plank', sets: 3, reps: '30', unit: 'sec', notes: '30-second hold.' },
+            ],
+          },
+          Saturday: {
+            name: 'Long Effort',
+            focus: 'Endurance / Recovery',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 hip hinges', '8 arm circles each direction'],
+            coachNotes: 'Keep the breathing easy and let the volume build gradually.',
+            conditioning: { format: '16 minute continuous effort', target: 'RPE 5-6' },
+            exercises: [
+              { name: 'Bike, Rower, or Brisk Walk', sets: 1, reps: '16', unit: 'min', notes: 'Stay relaxed and consistent.' },
+              { name: 'Dead Bug', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Intervals',
+            focus: 'Conditioning / Full Body',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 bodyweight squats', '8 elevated push-ups', '20 high knees'],
+            coachNotes: 'Same rounds, shorter rest. This is the densest week of the block.',
+            conditioning: { format: '7 rounds', work: '30 sec', rest: '30 sec' },
+            exercises: [
+              { name: 'Bike Sprint', sets: 7, reps: '30', unit: 'sec', notes: '30 seconds strong effort.' },
+              { name: 'Bodyweight Squat', sets: 3, reps: '15', unit: 'reps', notes: 'Stay smooth under fatigue.' },
+              { name: 'Incline Push-Up', sets: 3, reps: '12', unit: 'reps', notes: 'Short rest, clean reps.' },
+            ],
+          },
+          Thursday: {
+            name: 'Tempo Cardio',
+            focus: 'Aerobic Base / Core',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '6 walking lunges per side', '20 second plank'],
+            coachNotes: 'A touch harder today, but the effort should still be controlled.',
+            conditioning: { format: '12 minute tempo effort', target: 'RPE 7' },
+            exercises: [
+              { name: 'Jog or Fast Walk', sets: 1, reps: '12', unit: 'min', notes: 'Push the pace slightly above easy conversation.' },
+              { name: 'Walking Lunge', sets: 2, reps: '12', unit: 'reps', notes: '12 reps per leg.' },
+              { name: 'Plank', sets: 3, reps: '35', unit: 'sec', notes: '35-second hold.' },
+            ],
+          },
+          Saturday: {
+            name: 'Long Effort',
+            focus: 'Endurance / Recovery',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 hip hinges', '8 arm circles each direction'],
+            coachNotes: 'This is the longest sustained effort in the plan, but it should still feel sustainable.',
+            conditioning: { format: '18 minute continuous effort', target: 'RPE 6' },
+            exercises: [
+              { name: 'Bike, Rower, or Brisk Walk', sets: 1, reps: '18', unit: 'min', notes: 'Stay controlled and rhythmic.' },
+              { name: 'Dead Bug', sets: 2, reps: '10', unit: 'reps', notes: '10 reps per side.' },
+            ],
+          },
+        },
+        {
+          Tuesday: {
+            name: 'Intervals',
+            focus: 'Conditioning / Full Body',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 bodyweight squats', '8 elevated push-ups', '20 high knees'],
+            coachNotes: 'Benchmark week. Match or slightly beat week 3 while staying smooth.',
+            conditioning: { format: '8 rounds', work: '30 sec', rest: '30 sec' },
+            exercises: [
+              { name: 'Bike Sprint', sets: 8, reps: '30', unit: 'sec', notes: '30 seconds hard effort with repeatable pace.' },
+              { name: 'Bodyweight Squat', sets: 3, reps: '15', unit: 'reps', notes: 'Stay light on your feet.' },
+              { name: 'Incline Push-Up', sets: 3, reps: '12', unit: 'reps', notes: 'Keep the reps crisp.' },
+            ],
+          },
+          Thursday: {
+            name: 'Tempo Cardio',
+            focus: 'Aerobic Base / Core',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '6 walking lunges per side', '20 second plank'],
+            coachNotes: 'One last tempo session. Stay smooth and don’t chase a sprint pace.',
+            conditioning: { format: '14 minute tempo effort', target: 'RPE 6-7' },
+            exercises: [
+              { name: 'Jog or Fast Walk', sets: 1, reps: '14', unit: 'min', notes: 'Slightly faster than week 2, still controlled.' },
+              { name: 'Walking Lunge', sets: 2, reps: '12', unit: 'reps', notes: '12 reps per leg.' },
+              { name: 'Plank', sets: 3, reps: '40', unit: 'sec', notes: '40-second hold.' },
+            ],
+          },
+          Saturday: {
+            name: 'Long Effort',
+            focus: 'Endurance / Recovery',
+            estimatedDuration: 20,
+            warmup: ['2 minutes easy cardio', '8 hip hinges', '8 arm circles each direction'],
+            coachNotes: 'Finish by moving continuously and feeling better than when you started.',
+            conditioning: { format: '20 minute continuous effort', target: 'RPE 5-6' },
+            exercises: [
+              { name: 'Bike, Rower, or Brisk Walk', sets: 1, reps: '20', unit: 'min', notes: 'Relax into the effort and keep it sustainable.' },
+              { name: 'Dead Bug', sets: 2, reps: '12', unit: 'reps', notes: '12 reps per side.' },
+            ],
+          },
+        },
+      ]),
     },
   ];
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,15 +14,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { api } from '@/lib/api';
-import { useAuth } from '@/context/AuthContext';
 import { useActiveProgram } from '@/hooks/useActiveProgram';
 import { colors, spacing, typography, radii, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { SharedProgram } from '@/types';
+import { formatTag, getProgramHighlights, parseWorkoutPlan } from '@/lib/programCatalog';
+
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function ProgramDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
   const { program: activeProgram } = useActiveProgram();
 
   const [program, setProgram] = useState<SharedProgram | null>(null);
@@ -74,7 +75,7 @@ export default function ProgramDetailScreen() {
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Replace', style: 'destructive', onPress: doEnroll },
-        ]
+        ],
       );
     } else {
       doEnroll();
@@ -99,6 +100,20 @@ export default function ProgramDetailScreen() {
     }
   }
 
+  const workoutWeeks = useMemo(() => {
+    if (!program) return [];
+    const plan = parseWorkoutPlan(program.workoutPlan);
+    return Object.entries(plan)
+      .map(([weekKey, sessions]) => ({
+        weekNumber: parseInt(weekKey.replace(/\D/g, ''), 10),
+        sessions: Object.entries(sessions)
+          .sort(([a], [b]) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b))
+          .map(([day, session]) => ({ day, ...(session as Record<string, any>) })),
+      }))
+      .filter((week) => !Number.isNaN(week.weekNumber))
+      .sort((a, b) => a.weekNumber - b.weekNumber);
+  }, [program]);
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -121,12 +136,13 @@ export default function ProgramDetailScreen() {
   }
 
   const stars = Math.round(program.ratingAverage ?? 0);
+  const highlights = getProgramHighlights(program);
+  const topTags = program.tags.filter((tag) => !/^\d+_min$/.test(tag)).slice(0, 5);
+  const firstWeekWorkoutCount = workoutWeeks[0]?.sessions.length ?? 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-
-        {/* Cover image with back button overlay */}
         <View style={styles.coverContainer}>
           {program.coverImageUrl ? (
             <Image source={{ uri: program.coverImageUrl }} style={styles.coverImage} resizeMode="cover" />
@@ -141,18 +157,14 @@ export default function ProgramDetailScreen() {
         </View>
 
         <View style={styles.body}>
-          {/* Program name */}
           <Text style={styles.title}>{program.name}</Text>
 
-          {/* Creator row */}
           <View style={styles.creatorRow}>
             {program.creatorAvatar ? (
               <Image source={{ uri: program.creatorAvatar }} style={styles.creatorAvatar} />
             ) : (
               <View style={styles.creatorAvatarPlaceholder}>
-                <Text style={styles.creatorAvatarInitial}>
-                  {(program.creatorName ?? '?')[0].toUpperCase()}
-                </Text>
+                <Text style={styles.creatorAvatarInitial}>{(program.creatorName ?? '?')[0].toUpperCase()}</Text>
               </View>
             )}
             <View>
@@ -161,17 +173,20 @@ export default function ProgramDetailScreen() {
             </View>
           </View>
 
-          {/* Badges */}
           <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{program.category}</Text>
-            </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{program.difficulty}</Text>
-            </View>
+            {highlights.map((badge) => (
+              <View key={badge} style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View>
+            ))}
           </View>
 
-          {/* Price */}
+          {topTags.length > 0 ? (
+            <View style={styles.tagRow}>
+              {topTags.map((tag) => (
+                <Text key={`${program.id}-${tag}`} style={styles.tagText}>{formatTag(tag)}</Text>
+              ))}
+            </View>
+          ) : null}
+
           {(program.price ?? 0) === 0 ? (
             <View style={styles.priceRow}>
               <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
@@ -185,7 +200,6 @@ export default function ProgramDetailScreen() {
             </View>
           )}
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{program.durationWeeks}</Text>
@@ -196,14 +210,17 @@ export default function ProgramDetailScreen() {
               <Text style={styles.statLabel}>Days/Week</Text>
             </View>
             <View style={styles.stat}>
+              <Text style={styles.statValue}>{firstWeekWorkoutCount}</Text>
+              <Text style={styles.statLabel}>Week 1 Sessions</Text>
+            </View>
+            <View style={styles.stat}>
               <Text style={styles.statValue}>{program.enrollmentCount ?? 0}</Text>
               <Text style={styles.statLabel}>Enrolled</Text>
             </View>
           </View>
 
-          {/* Rating display */}
           <View style={styles.ratingRow}>
-            {[1,2,3,4,5].map((star) => (
+            {[1, 2, 3, 4, 5].map((star) => (
               <Ionicons
                 key={star}
                 name={star <= stars ? 'star' : 'star-outline'}
@@ -214,29 +231,47 @@ export default function ProgramDetailScreen() {
             <Text style={styles.ratingText}>{(program.ratingAverage ?? 0).toFixed(1)}</Text>
           </View>
 
-          {/* Description */}
-          {program.description ? (
-            <Text style={styles.description}>{program.description}</Text>
-          ) : null}
+          {program.description ? <Text style={styles.description}>{program.description}</Text> : null}
 
-          {/* Enroll */}
           <TouchableOpacity
             style={[styles.enrollBtn, isEnrolling && styles.enrollBtnDisabled]}
             onPress={handleEnroll}
             disabled={isEnrolling}
           >
-            {isEnrolling ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.enrollBtnText}>Start This Program</Text>
-            )}
+            {isEnrolling ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.enrollBtnText}>Start This Program</Text>}
           </TouchableOpacity>
 
-          {/* Rate */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Schedule Preview</Text>
+            <Text style={styles.sectionText}>All weeks are authored. Browse the plan before you enroll.</Text>
+          </View>
+
+          {workoutWeeks.map((week) => (
+            <View key={week.weekNumber} style={styles.weekCard}>
+              <Text style={styles.weekTitle}>Week {week.weekNumber}</Text>
+              {week.sessions.map((session) => (
+                <View key={`${week.weekNumber}-${session.day}`} style={styles.sessionRow}>
+                  <View style={styles.sessionCopy}>
+                    <Text style={styles.sessionDay}>{session.day}</Text>
+                    <Text style={styles.sessionName}>{session.name ?? session.day}</Text>
+                    {session.focus ? <Text style={styles.sessionFocus}>{session.focus}</Text> : null}
+                    {session.coachNotes ? <Text style={styles.sessionNotes}>{session.coachNotes}</Text> : null}
+                  </View>
+                  <View style={styles.sessionMeta}>
+                    {typeof session.estimatedDuration === 'number' ? (
+                      <View style={styles.metaChip}><Text style={styles.metaChipText}>{session.estimatedDuration} min</Text></View>
+                    ) : null}
+                    <View style={styles.metaChip}><Text style={styles.metaChipText}>{Array.isArray(session.exercises) ? session.exercises.length : 0} exercises</Text></View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+
           <View style={styles.rateSection}>
             <Text style={styles.rateSectionTitle}>Rate This Program</Text>
             <View style={styles.ratingRow}>
-              {[1,2,3,4,5].map((star) => (
+              {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity key={star} onPress={() => handleRate(star)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
                   <Ionicons
                     name={star <= userRating ? 'star' : 'star-outline'}
@@ -257,7 +292,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { fontSize: typography.md, color: colors.danger, textAlign: 'center' },
-  // Cover
   coverContainer: { position: 'relative' },
   coverImage: { width: '100%', height: 220 },
   coverPlaceholder: {
@@ -287,10 +321,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  // Body
   body: { padding: spacing.lg, gap: spacing.lg, paddingBottom: TAB_BAR_BOTTOM_INSET },
   title: { fontSize: 26, fontWeight: '800', color: colors.text, lineHeight: 32 },
-  // Creator
   creatorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   creatorAvatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colors.border },
   creatorAvatarPlaceholder: {
@@ -304,7 +336,6 @@ const styles = StyleSheet.create({
   creatorAvatarInitial: { fontSize: 18, fontWeight: '700', color: '#fff' },
   creatorLabel: { fontSize: typography.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
   creatorName: { fontSize: typography.md, fontWeight: '700', color: colors.text },
-  // Badges
   badgeRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   badge: {
     paddingHorizontal: spacing.md,
@@ -314,11 +345,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accent,
   },
-  badgeText: { fontSize: typography.xs, color: colors.accent, fontWeight: '600', textTransform: 'capitalize' },
-  // Stats
-  statsRow: { flexDirection: 'row', gap: spacing.md },
+  badgeText: { fontSize: typography.xs, color: colors.accent, fontWeight: '600' },
+  tagRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  tagText: { fontSize: typography.xs, color: colors.textMuted },
+  statsRow: { flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' },
   stat: {
-    flex: 1,
+    flexGrow: 1,
+    minWidth: 72,
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.md,
@@ -330,14 +363,11 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   ratingText: { fontSize: typography.md, color: colors.text, fontWeight: '600', marginLeft: spacing.xs },
-  // Price
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   priceFree: { fontSize: typography.md, fontWeight: '700', color: colors.accent },
   priceBeta: { fontSize: typography.md, fontWeight: '700', color: colors.textSecondary },
   priceFuture: { fontSize: typography.sm, color: colors.textMuted },
-  // Description
   description: { fontSize: typography.md, color: colors.textSecondary, lineHeight: 22 },
-  // Enroll
   enrollBtn: {
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
@@ -346,7 +376,40 @@ const styles = StyleSheet.create({
   },
   enrollBtnDisabled: { opacity: 0.6 },
   enrollBtnText: { fontSize: typography.lg, fontWeight: '700', color: '#fff' },
-  // Rate
+  section: { gap: spacing.xs },
+  sectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text },
+  sectionText: { fontSize: typography.sm, color: colors.textSecondary },
+  weekCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  weekTitle: { fontSize: typography.md, fontWeight: '700', color: colors.text },
+  sessionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  sessionCopy: { flex: 1, gap: 2 },
+  sessionDay: { fontSize: typography.xs, color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' },
+  sessionName: { fontSize: typography.md, color: colors.text, fontWeight: '600' },
+  sessionFocus: { fontSize: typography.sm, color: colors.accent },
+  sessionNotes: { fontSize: typography.xs, color: colors.textSecondary, lineHeight: 18 },
+  sessionMeta: { alignItems: 'flex-end', gap: spacing.xs },
+  metaChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: colors.bgSecondary ?? colors.surfaceHover ?? colors.surface,
+  },
+  metaChipText: { fontSize: typography.xs, color: colors.textSecondary, fontWeight: '600' },
   rateSection: { gap: spacing.sm },
   rateSectionTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text },
 });

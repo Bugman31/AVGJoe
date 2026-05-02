@@ -17,6 +17,7 @@ import { theme } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useAuth } from '@/context/AuthContext';
+import { generateText, isAppleAIAvailable } from 'apple-ai';
 import { StepCard } from '@/components/onboarding/StepCard';
 import { SingleSelect } from '@/components/onboarding/SingleSelect';
 import { OptionPicker } from '@/components/onboarding/OptionPicker';
@@ -209,8 +210,73 @@ export default function OnboardingScreen() {
     try {
       await api.post('/api/profile/onboarding', data);
       await clearPartial();
-      // Refresh user state to pick up onboardingCompleted: true
       await refreshUser();
+
+      // For new users, generate a starter program on-device
+      if (!isEditMode && !returnTo) {
+        const aiAvailable = await isAppleAIAvailable();
+        if (aiAvailable) {
+          try {
+            const promptLines = [
+              `Goal: ${data.primaryGoal?.replace(/_/g, ' ')}`,
+              `Fitness level: ${data.experienceLevel}`,
+              `Training days per week: ${data.daysPerWeek}`,
+              `Session duration: ${data.sessionDurationMins} minutes`,
+              `Preferred split: ${data.preferredSplit?.replace(/_/g, ' ')}`,
+              `Weight unit: ${data.unitSystem}`,
+            ];
+            if (data.workoutEnvironment) promptLines.push(`Environment: ${data.workoutEnvironment.replace(/_/g, ' ')}`);
+            if (data.availableEquipment.length) promptLines.push(`Equipment: ${data.availableEquipment.join(', ')}`);
+            if (data.injuryFlags.length) promptLines.push(`Injuries/limitations: ${data.injuryFlags.join(', ')}`);
+            if (data.restrictions.length) promptLines.push(`Movement restrictions: ${data.restrictions.join(', ')}`);
+            if (data.benchmarkBench) promptLines.push(`Bench press 1RM: ${data.benchmarkBench} ${data.unitSystem}`);
+            if (data.benchmarkSquat) promptLines.push(`Squat 1RM: ${data.benchmarkSquat} ${data.unitSystem}`);
+            if (data.benchmarkDeadlift) promptLines.push(`Deadlift 1RM: ${data.benchmarkDeadlift} ${data.unitSystem}`);
+
+            const raw = await generateText(
+              `You are an expert certified personal trainer. Generate a multi-week strength training program as a single JSON object. Return ONLY valid JSON with no markdown, no explanation, no code fences.
+
+JSON schema:
+{
+  "name": string,
+  "description": string,
+  "totalWeeks": number (4–8),
+  "weeks": [
+    {
+      "weekNumber": number,
+      "workouts": [
+        {
+          "dayOfWeek": string,
+          "name": string,
+          "focus": string,
+          "estimatedDuration": number,
+          "exercises": [
+            {
+              "name": string,
+              "orderIndex": number,
+              "notes": string,
+              "sets": [{ "setNumber": number, "targetReps": number | null, "targetWeight": number | null, "unit": string }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules: progressive overload week over week, 4–7 exercises per workout, 3–5 sets per exercise, evidence-based rep ranges, identical exercise selection across weeks with varying load/reps.`,
+              promptLines.join('\n'),
+            );
+
+            const cleaned = raw.replace(/```(?:json)?\n?/g, '').trim();
+            const programData = JSON.parse(cleaned);
+            await api.post('/api/programs/custom', programData);
+          } catch {
+            // AI generation failed — user can create a program manually
+          }
+        }
+      }
+
       router.replace(resolvedReturnTo);
     } catch (e) {
       Alert.alert('Error', (e as Error).message);
@@ -437,7 +503,11 @@ export default function OnboardingScreen() {
               loading={isSubmitting}
               disabled={isSubmitting}
             >
-              {isEditMode || !!returnTo ? 'Save Training Profile' : 'Build My Program'}
+              {isSubmitting && !isEditMode && !returnTo
+              ? 'Building Your Program…'
+              : isEditMode || !!returnTo
+                ? 'Save Training Profile'
+                : 'Build My Program'}
             </Button>
           )}
         </View>

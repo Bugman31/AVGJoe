@@ -15,7 +15,6 @@ const mockUser = {
   id: 'user-1',
   email: 'test@example.com',
   name: 'Test User',
-  hasAnthropicKey: false,
   createdAt: new Date().toISOString(),
   onboardingCompleted: true,
 };
