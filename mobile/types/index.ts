@@ -114,6 +114,7 @@ export interface PlannedWorkout {
   coachNotes?: string;
   estimatedDuration?: number;
   isCompleted: boolean;
+  isSkipped: boolean;
   completedSessionId?: string;
   createdAt: string;
 }
@@ -358,6 +359,88 @@ export interface ProgramEnrollment {
   sharedProgramId: string;
   programId: string;
   enrolledAt: string;
+}
+
+// ─── Summary / Dashboard ───────────────────────────────────────────────────
+
+export interface NextWorkoutSummary {
+  id: string;
+  name: string;
+  focus: string | null;
+  estimatedDuration: number | null;
+  dayOfWeek: string;
+  exerciseCount: number;
+}
+
+export interface WeekAdherence {
+  completed: number;
+  total: number;
+  percent: number;
+}
+
+export interface WeekDayStatus {
+  dayOfWeek: string;
+  isCompleted: boolean;
+}
+
+export interface ActiveProgramSummary {
+  id: string;
+  name: string;
+  currentWeek: number;
+  totalWeeks: number;
+  progressPercent: number;
+  nextWorkout: NextWorkoutSummary | null;
+  weekAdherence: WeekAdherence;
+  weekDays: WeekDayStatus[];
+}
+
+export interface RecentSessionSummary {
+  id: string;
+  name: string;
+  completedAt: string;
+  workoutScore: number | null;
+  scoreLabel: string | null;
+  setCount: number;
+  totalVolume: number;
+}
+
+export type ReadinessLabel = 'Ready' | 'Needs Recovery' | 'Behind Plan';
+
+export interface ReadinessSummary {
+  label: ReadinessLabel;
+  daysSinceLast: number;
+}
+
+export interface InProgressSession {
+  id: string;
+  name: string;
+}
+
+export interface DashboardSummary {
+  activeProgram: ActiveProgramSummary | null;
+  streak: number;
+  readiness: ReadinessSummary;
+  recentSessions: RecentSessionSummary[];
+  inProgressSession: InProgressSession | null;
+}
+
+// ─── Progress Summary ──────────────────────────────────────────────────────
+
+export type ProgressRange = '1w' | '1m' | '3m' | '1y' | 'all';
+
+export interface TopLift {
+  name: string;
+  estimated1RM: number;
+  unit: string;
+}
+
+export interface ProgressSummary {
+  range: string;
+  totalWorkouts: number;
+  totalVolume: number;
+  avgWorkoutScore: number | null;
+  consistencyScore: number;
+  topLifts: TopLift[];
 }
 
 export interface ProgramRating {

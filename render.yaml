@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_PROVIDER
+        value: postgresql
       - key: PORT
         value: 8000
       - key: DATABASE_URL

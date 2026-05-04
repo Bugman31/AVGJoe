@@ -29,6 +29,7 @@ export const prisma = {
   },
   program: {
     create: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),

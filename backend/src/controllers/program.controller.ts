@@ -101,6 +101,42 @@ export async function createCustom(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function skipPlannedWorkout(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const pw = await programService.skipPlannedWorkout(req.params.id, req.user.id);
+    res.json({ plannedWorkout: pw });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function restorePlannedWorkout(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const pw = await programService.restorePlannedWorkout(req.params.id, req.user.id);
+    res.json({ plannedWorkout: pw });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listCurrent(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const programs = await programService.listCurrentPrograms(req.user.id);
+    res.json({ programs });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listPast(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const programs = await programService.listPastPrograms(req.user.id);
+    res.json({ programs });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { status } = statusSchema.parse(req.body);

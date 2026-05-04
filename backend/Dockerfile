@@ -8,7 +8,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY prisma ./prisma
-RUN npx prisma generate
+COPY scripts ./scripts
+RUN npm run db:check-schemas && npm run db:generate:postgres
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -16,4 +17,4 @@ RUN npm run build
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/server.js"]
+CMD ["sh", "-c", "npm run db:migrate:deploy:postgres && npm run db:seed && node dist/server.js"]
