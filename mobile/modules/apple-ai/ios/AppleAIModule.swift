@@ -23,9 +23,8 @@ public class AppleAIModule: Module {
       guard #available(iOS 26.0, *) else {
         throw FoundationModelError.notAvailable
       }
-      guard SystemLanguageModel.default.isAvailable else {
-        throw FoundationModelError.notAvailable
-      }
+      // Skip isAvailable pre-check — it can be transiently false even when AI is
+      // configured. Let the session throw naturally if the model genuinely can't run.
       let session = LanguageModelSession(instructions: systemPrompt)
       let response = try await session.respond(to: userPrompt)
       return response.content
@@ -33,9 +32,6 @@ public class AppleAIModule: Module {
 
     AsyncFunction("chat") { (systemPrompt: String, messages: [[String: String]]) -> String in
       guard #available(iOS 26.0, *) else {
-        throw FoundationModelError.notAvailable
-      }
-      guard SystemLanguageModel.default.isAvailable else {
         throw FoundationModelError.notAvailable
       }
       let session = LanguageModelSession(instructions: systemPrompt)

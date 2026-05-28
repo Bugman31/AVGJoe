@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
 import { colors, spacing, typography } from '@/lib/theme';
-import { generateText, isAppleAIAvailable, getAppleAIUnavailableReason } from 'apple-ai';
+import { generateText, isAppleAIAvailable } from 'apple-ai';
 
 const FITNESS_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 const DAYS_OPTIONS = [2, 3, 4, 5, 6];
@@ -112,12 +112,6 @@ export default function AiScreen() {
       Toast.show({ type: 'error', text1: 'Goal must be at least 10 characters' });
       return;
     }
-    if (!aiAvailable) {
-      const reason = await getAppleAIUnavailableReason();
-      Alert.alert('Apple Intelligence Required', reason);
-      return;
-    }
-
     setIsLoading(true);
     try {
       const userPrompt = buildUserPrompt({
@@ -147,11 +141,18 @@ export default function AiScreen() {
       Toast.show({ type: 'success', text1: 'Program created!', text2: 'Find it in your Programs tab.' });
       router.push('/(app)/(tabs)/programs');
     } catch (err) {
-      Toast.show({
-        type: 'error',
-        text1: 'Generation failed',
-        text2: err instanceof Error ? err.message : 'Unknown error',
-      });
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      const isAiError = msg.toLowerCase().includes('not available') ||
+        msg.toLowerCase().includes('apple intelligence') ||
+        msg.toLowerCase().includes('language model');
+      if (isAiError) {
+        Alert.alert(
+          'Apple Intelligence Unavailable',
+          'The on-device model could not run. Make sure Apple Intelligence is enabled in Settings → Apple Intelligence & Siri and the model has finished downloading.',
+        );
+      } else {
+        Toast.show({ type: 'error', text1: 'Generation failed', text2: msg });
+      }
     } finally {
       setIsLoading(false);
     }
