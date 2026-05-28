@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
 import { colors, spacing, typography } from '@/lib/theme';
-import { generateText, isAppleAIAvailable } from 'apple-ai';
+import { generateText, isAppleAIAvailable, getAppleAIUnavailableReason } from 'apple-ai';
 
 const FITNESS_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 const DAYS_OPTIONS = [2, 3, 4, 5, 6];
@@ -113,10 +113,8 @@ export default function AiScreen() {
       return;
     }
     if (!aiAvailable) {
-      Alert.alert(
-        'Apple Intelligence Required',
-        'This feature requires Apple Intelligence (iPhone 15 Pro or later with iOS 18.1+) and must be enabled in Settings → Apple Intelligence & Siri.',
-      );
+      const reason = await getAppleAIUnavailableReason();
+      Alert.alert('Apple Intelligence Required', reason);
       return;
     }
 
@@ -165,7 +163,7 @@ export default function AiScreen() {
         <Text style={styles.title}>AI Workout Generator</Text>
         <Text style={styles.subtitle}>
           {aiAvailable === false
-            ? 'Requires Apple Intelligence (iPhone 15 Pro+ · iOS 18.1+)'
+            ? 'Requires iPhone 15 Pro+ · iOS 26+ with model downloaded'
             : 'Describe your goal and get a custom program'}
         </Text>
       </View>

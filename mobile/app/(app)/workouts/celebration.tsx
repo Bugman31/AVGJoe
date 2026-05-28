@@ -58,7 +58,7 @@ export default function CelebrationScreen() {
 
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={() => router.push(`/(app)/progress/${sessionId}`)}
+          onPress={() => router.navigate(`/(app)/progress/${sessionId}`)}
         >
           <Ionicons name="bar-chart-outline" size={18} color="#fff" />
           <Text style={styles.primaryBtnText}>View Summary</Text>
@@ -66,7 +66,7 @@ export default function CelebrationScreen() {
 
         <TouchableOpacity
           style={styles.secondaryBtn}
-          onPress={() => router.replace('/(app)/home')}
+          onPress={() => router.navigate('/(app)/home')}
         >
           <Text style={styles.secondaryBtnText}>Done</Text>
         </TouchableOpacity>

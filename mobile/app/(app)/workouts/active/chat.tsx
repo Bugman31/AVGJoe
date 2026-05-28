@@ -11,7 +11,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
@@ -86,6 +86,16 @@ export default function CoachChatScreen() {
 
   const listRef = useRef<FlatList<Message>>(null);
 
+  // If the screen is focused without a live session (e.g. user taps the
+  // Workout tab after a workout ended), navigate back to the workouts root.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!sessionId) {
+        router.navigate('/(app)/workouts');
+      }
+    }, [sessionId, router])
+  );
+
   useEffect(() => {
     if (!sessionId) return;
 
@@ -141,7 +151,7 @@ export default function CoachChatScreen() {
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error) {
       const msg = error instanceof Error && error.message.includes('not available')
-        ? 'Apple Intelligence is not available on this device. Requires iPhone 15 Pro+ with iOS 18.1+.'
+        ? 'The on-device language model is not ready. Check Settings → Apple Intelligence & Siri to see if the model is still downloading.'
         : "Sorry, I couldn't reach the coach right now. Try again.";
       setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
     } finally {

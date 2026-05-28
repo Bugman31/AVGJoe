@@ -1,6 +1,6 @@
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import { Tabs, Redirect } from 'expo-router';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Tabs, Redirect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '@/context/AuthContext';
@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useTheme } from '@/context/ThemeContext';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useWelcomeGate } from '@/hooks/useWelcomeGate';
+import { useActiveSession } from '@/context/ActiveSessionContext';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -37,6 +38,8 @@ export default function AppLayout() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { colors, isDark } = useTheme();
   const { isChecking, shouldShowWelcome } = useWelcomeGate();
+  const { activeSessionId } = useActiveSession();
+  const router = useRouter();
 
   if (isLoading || isChecking) return <Spinner fullScreen />;
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
@@ -93,6 +96,19 @@ export default function AppLayout() {
           tabBarIcon: ({ focused }) => <TabIcon name="barbell" focused={focused} />,
           headerShown: true,
           header: () => <BrandHeader />,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          tabBarButton: (props: any) => (
+            <TouchableOpacity
+              {...props}
+              onPress={() => {
+                if (activeSessionId) {
+                  router.navigate(`/(app)/workouts/active/${activeSessionId}`);
+                } else {
+                  router.navigate('/(app)/workouts');
+                }
+              }}
+            />
+          ),
         }}
       />
       <Tabs.Screen

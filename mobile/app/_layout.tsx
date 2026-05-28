@@ -8,6 +8,7 @@ import Toast from 'react-native-toast-message';
 import { AuthProvider } from '@/context/AuthContext';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+import { ActiveSessionProvider } from '@/context/ActiveSessionContext';
 
 function InnerLayout() {
   const { isDark } = useTheme();
@@ -26,9 +27,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <SafeAreaProvider>
           <AuthProvider>
-            <OnboardingProvider>
-              <InnerLayout />
-            </OnboardingProvider>
+            <ActiveSessionProvider>
+              <OnboardingProvider>
+                <InnerLayout />
+              </OnboardingProvider>
+            </ActiveSessionProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </ThemeProvider>

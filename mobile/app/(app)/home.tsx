@@ -14,6 +14,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography, TAB_BAR_BOTTOM_INSET } from '@/lib/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveSession } from '@/context/ActiveSessionContext';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { api } from '@/lib/api';
 import { DatePickerModal } from '@/components/ui/DatePickerModal';
@@ -37,6 +38,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const { summary, isLoading, error, reload } = useDashboardSummary();
+  const { setActiveSessionId } = useActiveSession();
   const [refreshing, setRefreshing] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pendingWorkout, setPendingWorkout] = useState<{ id: string; name: string; programId?: string } | null>(null);
@@ -46,6 +48,13 @@ export default function HomeScreen() {
       void reload();
     }, [reload])
   );
+
+  // Keep the active session context in sync with the dashboard data.
+  React.useEffect(() => {
+    if (!isLoading) {
+      setActiveSessionId(summary?.inProgressSession?.id ?? null);
+    }
+  }, [summary?.inProgressSession?.id, isLoading, setActiveSessionId]);
 
   async function onRefresh() {
     setRefreshing(true);

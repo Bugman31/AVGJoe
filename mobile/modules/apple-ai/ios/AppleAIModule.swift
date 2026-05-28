@@ -12,6 +12,13 @@ public class AppleAIModule: Module {
       return false
     }
 
+    AsyncFunction("availabilityReason") { () -> String in
+      if #available(iOS 26.0, *) {
+        return SystemLanguageModel.default.isAvailable ? "available" : "model_not_ready"
+      }
+      return "os_not_supported"
+    }
+
     AsyncFunction("generateText") { (systemPrompt: String, userPrompt: String) -> String in
       guard #available(iOS 26.0, *) else {
         throw FoundationModelError.notAvailable

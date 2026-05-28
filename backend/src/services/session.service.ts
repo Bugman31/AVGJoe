@@ -275,10 +275,15 @@ interface SetForScoring {
   rpe?: number | null;
 }
 
-function computeWorkoutScore(sets: SetForScoring[]): { workoutScore: number; scoreLabel: string } {
+function computeWorkoutScore(sets: SetForScoring[]): {
+  workoutScore: number;
+  scoreLabel: string;
+  completionScore: number;
+  performanceScore: number;
+} {
   const setsWithReps = sets.filter((s) => s.actualReps != null && s.actualReps > 0);
 
-  // completionScore: did you log reps for all sets?
+  // completionScore: did you log reps for all sets? (0–10 scale)
   const completionScore = sets.length === 0 ? 10 : (setsWithReps.length / sets.length) * 10;
 
   // performanceScore: no target data for MVP → neutral 7.5
@@ -316,7 +321,7 @@ function computeWorkoutScore(sets: SetForScoring[]): { workoutScore: number; sco
   else if (workoutScore >= 6.0) scoreLabel = 'Needs Work';
   else scoreLabel = 'Recovery Day';
 
-  return { workoutScore, scoreLabel };
+  return { workoutScore, scoreLabel, completionScore, performanceScore };
 }
 
 export async function completeSession(sessionId: string, userId: string, data: CompleteSessionData = {}) {
@@ -351,9 +356,7 @@ export async function completeSession(sessionId: string, userId: string, data: C
   const endTime = new Date();
   const durationMinutes = Math.round((endTime.getTime() - session.startedAt.getTime()) / 60000);
 
-  const { workoutScore, scoreLabel } = computeWorkoutScore(session.sets);
-  const completionScore = session.sets.length > 0 ? 75 : 0;
-  const performanceScore = 70;
+  const { workoutScore, scoreLabel, completionScore, performanceScore } = computeWorkoutScore(session.sets);
 
   const updated = await prisma.workoutSession.update({
     where: { id: sessionId },

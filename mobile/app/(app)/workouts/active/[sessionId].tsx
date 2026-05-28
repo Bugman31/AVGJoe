@@ -22,6 +22,7 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useActiveSession } from '@/context/ActiveSessionContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -148,8 +149,12 @@ function formatHeartRateTrend(
 export default function ActiveWorkoutScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const router = useRouter();
+  const { setActiveSessionId } = useActiveSession();
+
   const goHome = () => {
-    router.replace('/(app)/home');
+    setActiveSessionId(null);
+    router.navigate('/(app)/workouts');
+    router.navigate('/(app)/home');
   };
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -231,6 +236,7 @@ export default function ActiveWorkoutScreen() {
         const profile = profileRes.profile ?? null;
         setUserProfile(profile);
         setSession(sessionRes.session);
+        if (sessionId) setActiveSessionId(sessionId);
 
         if (sessionRes.session.plannedWorkoutId && sessionRes.session.programId) {
           const progRes = await api.get<{ program: { plannedWorkouts: PlannedWorkout[] } }>(`/api/programs/active`);
@@ -570,6 +576,7 @@ export default function ActiveWorkoutScreen() {
           sorenessLevel: soreness ?? undefined,
         }
       );
+      setActiveSessionId(null);
       setShowFinishModal(false);
 
       if (res.session.startedAt && res.session.completedAt) {
@@ -585,7 +592,7 @@ export default function ActiveWorkoutScreen() {
       const durationSecs = res.session.startedAt && res.session.completedAt
         ? Math.round((new Date(res.session.completedAt).getTime() - new Date(res.session.startedAt).getTime()) / 1000)
         : 0;
-      router.replace(
+      router.navigate(
         `/(app)/workouts/celebration?sessionId=${sessionId}&sessionName=${encodeURIComponent(res.session.name)}&setsLogged=${loggedCount}&duration=${durationSecs}`
       );
     } catch (err) {
@@ -756,6 +763,42 @@ export default function ActiveWorkoutScreen() {
                 </View>
               );
             })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Up next — exercises with no sets logged yet, max 3 shown */}
+      {exercises.some((ex, ei) => {
+        const loggedCount = ex.sets.filter((s) => setStates[`${ei}-${s.setNumber}`]?.logged).length;
+        return loggedCount === 0 && !skippedExercises.has(`planned-${ei}`);
+      }) && (
+        <View style={styles.upNextSection}>
+          <Text style={styles.upNextLabel}>Up next</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.upNextContent}
+          >
+            {exercises
+              .map((ex, ei) => ({ ex, ei }))
+              .filter(({ ex, ei }) => {
+                const loggedCount = ex.sets.filter((s) => setStates[`${ei}-${s.setNumber}`]?.logged).length;
+                return loggedCount === 0 && !skippedExercises.has(`planned-${ei}`);
+              })
+              .slice(0, 3)
+              .map(({ ex, ei }) => (
+                <View key={ei} style={styles.upNextCard}>
+                  <Text style={styles.upNextName} numberOfLines={1}>{ex.name}</Text>
+                  <Text style={styles.upNextMeta}>
+                    {ex.sets.length} × {ex.sets[0]?.targetReps ?? '?'}
+                  </Text>
+                  <View style={styles.upNextDots}>
+                    {ex.sets.map((_, si) => (
+                      <View key={si} style={styles.upNextDot} />
+                    ))}
+                  </View>
+                </View>
+              ))}
           </ScrollView>
         </View>
       )}
@@ -1459,6 +1502,14 @@ const styles = StyleSheet.create({
   notesInput: { backgroundColor: theme.colors.surfaceHover, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12, color: theme.colors.text, fontSize: 14, minHeight: 100 },
   notePreview: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: theme.colors.bg, padding: 10, borderRadius: 8 },
   notePreviewText: { flex: 1, fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic' },
+  upNextSection: { paddingHorizontal: 16, paddingBottom: 8 },
+  upNextLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  upNextContent: { gap: 8, paddingRight: 16 },
+  upNextCard: { width: 140, backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, padding: 10, gap: 4 },
+  upNextName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  upNextMeta: { fontSize: 11, color: theme.colors.textMuted },
+  upNextDots: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  upNextDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.border },
 });
 
 const energyStyles = StyleSheet.create({
