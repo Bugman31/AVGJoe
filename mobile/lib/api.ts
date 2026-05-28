@@ -25,6 +25,8 @@ async function buildHeaders(extra: Record<string, string> = {}): Promise<Record<
   return headers;
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function request<T>(
   method: string,
   path: string,
@@ -43,11 +45,25 @@ async function request<T>(
     if (qs) url = `${url}?${qs}`;
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Request timed out. Check your connection and try again.');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (response.status === 401) {
     await removeToken();
