@@ -142,17 +142,7 @@ export default function AiScreen() {
       router.push('/(app)/(tabs)/programs');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      const isAiError = msg.toLowerCase().includes('not available') ||
-        msg.toLowerCase().includes('apple intelligence') ||
-        msg.toLowerCase().includes('language model');
-      if (isAiError) {
-        Alert.alert(
-          'Apple Intelligence Unavailable',
-          'The on-device model could not run. Make sure Apple Intelligence is enabled in Settings → Apple Intelligence & Siri and the model has finished downloading.',
-        );
-      } else {
-        Toast.show({ type: 'error', text1: 'Generation failed', text2: msg });
-      }
+      Alert.alert('Generation Failed', msg);
     } finally {
       setIsLoading(false);
     }

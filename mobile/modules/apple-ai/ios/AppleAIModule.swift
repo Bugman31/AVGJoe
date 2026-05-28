@@ -23,46 +23,53 @@ public class AppleAIModule: Module {
       guard #available(iOS 26.0, *) else {
         throw FoundationModelError.notAvailable
       }
-      // Skip isAvailable pre-check — it can be transiently false even when AI is
-      // configured. Let the session throw naturally if the model genuinely can't run.
-      let session = LanguageModelSession(instructions: systemPrompt)
-      let response = try await session.respond(to: userPrompt)
-      return response.content
+      do {
+        let session = LanguageModelSession(instructions: systemPrompt)
+        let response = try await session.respond(to: userPrompt)
+        return response.content
+      } catch {
+        // Surface the raw Foundation Models error so the JS layer can show it
+        throw FoundationModelError.sessionFailed(error.localizedDescription)
+      }
     }
 
     AsyncFunction("chat") { (systemPrompt: String, messages: [[String: String]]) -> String in
       guard #available(iOS 26.0, *) else {
         throw FoundationModelError.notAvailable
       }
-      let session = LanguageModelSession(instructions: systemPrompt)
+      do {
+        let session = LanguageModelSession(instructions: systemPrompt)
 
-      // Replay prior turns so the session has conversation history.
-      // Foundation Models builds history automatically via respond(), so we
-      // feed all but the last message, then send the actual new message.
-      var priorMessages = messages
-      let lastMessage = priorMessages.removeLast()
+        var priorMessages = messages
+        let lastMessage = priorMessages.removeLast()
 
-      for msg in priorMessages {
-        guard let role = msg["role"], let content = msg["content"] else { continue }
-        if role == "user" {
-          _ = try? await session.respond(to: content)
+        for msg in priorMessages {
+          guard let role = msg["role"], let content = msg["content"] else { continue }
+          if role == "user" {
+            _ = try? await session.respond(to: content)
+          }
         }
-      }
 
-      let userText = lastMessage["content"] ?? ""
-      let response = try await session.respond(to: userText)
-      return response.content
+        let userText = lastMessage["content"] ?? ""
+        let response = try await session.respond(to: userText)
+        return response.content
+      } catch {
+        throw FoundationModelError.sessionFailed(error.localizedDescription)
+      }
     }
   }
 }
 
 enum FoundationModelError: Error, LocalizedError {
   case notAvailable
+  case sessionFailed(String)
 
   var errorDescription: String? {
     switch self {
     case .notAvailable:
       return "Apple Intelligence is not available on this device. Requires iPhone 15 Pro or later with iOS 26+."
+    case .sessionFailed(let detail):
+      return "FoundationModels: \(detail)"
     }
   }
 }
